@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 480  # 8 hours
 
     # ── CORS ──
-    cors_origins: list[str] = ["http://localhost:3000"]
+    # Allow all origins or specify a comma-separated list
+    cors_origins: list[str] = ["*"]
 
     # ── App ──
     app_name: str = "Quantora AI"
