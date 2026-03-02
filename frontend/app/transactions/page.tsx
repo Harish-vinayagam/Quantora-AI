@@ -4,9 +4,9 @@ import { useState, useEffect, useMemo } from 'react';
 import Sidebar from '@/components/Sidebar';
 import BackButton from '@/components/ui/BackButton';
 import LiveTime from '@/components/ui/LiveTime';
-import { Clock, List, Search, ArrowUpDown, Filter } from 'lucide-react';
-import { initialTransactions, generateNewTransaction, type Transaction, type RiskLevel } from '@/lib/mockData';
-import { predictFraud } from '@/lib/api';
+import { Clock, List, Search, ArrowUpDown, Filter, Loader2 } from 'lucide-react';
+import { fetchTransactions, mapApiTransaction, type StoredTransaction } from '@/lib/api';
+import type { Transaction, RiskLevel } from '@/lib/mockData';
 
 // ── Helpers ──
 function riskColor(risk: RiskLevel) {
@@ -43,30 +43,31 @@ function formatAmount(n: number): string {
 }
 
 export default function TransactionsPage() {
-    const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [totalCount, setTotalCount] = useState(0);
     const [search, setSearch] = useState('');
     const [fraudOnly, setFraudOnly] = useState(false);
     const [sortByRisk, setSortByRisk] = useState(false);
+    const [loading, setLoading] = useState(true);
 
-    // Live data feed
+    // Fetch transactions from backend
     useEffect(() => {
-        const interval = setInterval(() => {
-            const newTx = generateNewTransaction();
-            predictFraud({
-                sender: parseInt(newTx.senderId.replace(/\D/g, '')) || 0,
-                receiver: parseInt(newTx.receiverId.replace(/\D/g, '')) || 0,
-                amount: newTx.amount,
-            }).then(res => {
-                const riskLabel: RiskLevel = res.risk_score > 0.7 ? 'high' : res.risk_score > 0.4 ? 'medium' : 'low';
-                newTx.risk = riskLabel;
-                newTx.isFraud = res.fraud_prediction === 1;
-            }).catch(() => { });
-            setTransactions(prev => [newTx, ...prev].slice(0, 200));
-        }, 3000);
+        const load = async () => {
+            try {
+                const data = await fetchTransactions(200, false);
+                setTransactions(data.transactions.map(mapApiTransaction));
+                setTotalCount(data.total);
+            } catch (e) {
+                console.error('[Quantora] Failed to fetch transactions:', e);
+            }
+            setLoading(false);
+        };
+        load();
+        const interval = setInterval(load, 3000);
         return () => clearInterval(interval);
     }, []);
 
-    // Filtered + sorted list
+    // Client-side filtering + sorting
     const filtered = useMemo(() => {
         let list = [...transactions];
         if (fraudOnly) list = list.filter(t => t.isFraud);
@@ -77,6 +78,21 @@ export default function TransactionsPage() {
         if (sortByRisk) list.sort((a, b) => riskNumeric(b.risk) - riskNumeric(a.risk));
         return list;
     }, [transactions, fraudOnly, search, sortByRisk]);
+
+    // Loading state
+    if (loading) {
+        return (
+            <div className="flex h-screen overflow-hidden bg-[var(--bg)]">
+                <Sidebar />
+                <div className="flex-1 flex items-center justify-center">
+                    <div className="flex items-center gap-3">
+                        <Loader2 size={16} className="animate-spin text-[var(--text-muted)]" />
+                        <span className="text-xs font-mono text-[var(--text-muted)]">Loading transactions...</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-screen overflow-hidden bg-[var(--bg)]">
@@ -91,7 +107,7 @@ export default function TransactionsPage() {
                         <List size={14} strokeWidth={1.5} className="text-[var(--text-secondary)]" />
                         <span className="text-xs font-semibold text-[var(--text-primary)]">Transactions</span>
                         <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-sm bg-zinc-700/40 border border-zinc-600/25 text-zinc-400">
-                            {filtered.length} records
+                            {filtered.length} / {totalCount} records
                         </span>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -104,7 +120,6 @@ export default function TransactionsPage() {
 
                 {/* Toolbar */}
                 <div className="flex-shrink-0 border-b border-[var(--border)] px-6 py-3 flex items-center gap-3">
-                    {/* Search */}
                     <div className="relative flex-1 max-w-xs">
                         <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
                         <input
@@ -116,7 +131,6 @@ export default function TransactionsPage() {
                         />
                     </div>
 
-                    {/* Fraud only */}
                     <button
                         onClick={() => setFraudOnly(v => !v)}
                         className={`flex items-center gap-1.5 h-8 px-3 text-[10px] font-mono rounded-md border transition-all ${fraudOnly
@@ -128,7 +142,6 @@ export default function TransactionsPage() {
                         Fraud Only
                     </button>
 
-                    {/* Sort by risk */}
                     <button
                         onClick={() => setSortByRisk(v => !v)}
                         className={`flex items-center gap-1.5 h-8 px-3 text-[10px] font-mono rounded-md border transition-all ${sortByRisk
@@ -160,23 +173,14 @@ export default function TransactionsPage() {
                                         key={tx.id}
                                         className={`border-b border-[var(--border)] hover:bg-[var(--surface)] transition-colors duration-100 ${i === 0 ? 'animate-slide-in' : ''}`}
                                     >
-                                        {/* TX ID */}
                                         <td className="px-5 py-3.5">
                                             <span className="text-[var(--text-primary)] font-semibold">{tx.id}</span>
                                         </td>
-
-                                        {/* Sender */}
                                         <td className="px-5 py-3.5 text-[var(--text-secondary)]">{tx.senderId}</td>
-
-                                        {/* Receiver */}
                                         <td className="px-5 py-3.5 text-[var(--text-secondary)]">{tx.receiverId}</td>
-
-                                        {/* Amount */}
                                         <td className="px-5 py-3.5 text-[var(--text-primary)] font-semibold">
                                             {formatAmount(tx.amount)}
                                         </td>
-
-                                        {/* Risk Score */}
                                         <td className="px-5 py-3.5">
                                             <div className="flex items-center gap-2">
                                                 <div className="w-12 h-1 rounded-full bg-[var(--border)] overflow-hidden">
@@ -193,15 +197,11 @@ export default function TransactionsPage() {
                                                 </span>
                                             </div>
                                         </td>
-
-                                        {/* Fraud Status */}
                                         <td className="px-5 py-3.5">
                                             <span className={`text-[9px] font-mono px-2 py-0.5 rounded-sm ${fraudBadge(!!tx.isFraud)}`}>
                                                 {tx.isFraud ? 'FRAUD' : 'SAFE'}
                                             </span>
                                         </td>
-
-                                        {/* Timestamp */}
                                         <td className="px-5 py-3.5 text-[var(--text-muted)]">
                                             {formatTime(tx.timestamp)}
                                         </td>

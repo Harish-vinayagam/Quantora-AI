@@ -1,14 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
 import KpiCard from '@/components/dashboard/KpiCard';
 import TrendChart from '@/components/dashboard/TrendChart';
 import RiskDistribution from '@/components/dashboard/RiskDistribution';
 import ClusterTable from '@/components/dashboard/ClusterTable';
-import { kpiMetrics, trendData, riskDistribution, riskClusters, getSystemStatus } from '@/lib/mockDashboardData';
-import { Sun, Moon } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { fetchDashboard, type DashboardData } from '@/lib/api';
+import { Sun, Moon, Loader2 } from 'lucide-react';
 
 const THREAT_COLOR = {
     High: 'text-red-400 bg-red-500/10 border-red-500/25',
@@ -19,14 +18,35 @@ const THREAT_COLOR = {
 export default function DashboardPage() {
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [clock, setClock] = useState('');
+    const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+    const [loading, setLoading] = useState(true);
 
-    const status = useMemo(() => getSystemStatus(), []);
+    // Fetch dashboard data from backend
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const data = await fetchDashboard();
+                setDashboard(data);
+            } catch (e) {
+                console.error('[Quantora] Failed to fetch dashboard:', e);
+            }
+            setLoading(false);
+        };
+        load();
+        const interval = setInterval(load, 5000);
+        return () => clearInterval(interval);
+    }, []);
 
-    // Live clock for "Last Updated"
+    // Live clock
     useEffect(() => {
         const tick = () =>
             setClock(
-                new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+                new Date().toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false,
+                })
             );
         tick();
         const id = setInterval(tick, 1000);
@@ -45,15 +65,31 @@ export default function DashboardPage() {
         document.documentElement.classList.add('dark');
     }, []);
 
+    // Loading state
+    if (loading || !dashboard) {
+        return (
+            <div className="flex h-screen overflow-hidden bg-[var(--bg)]">
+                <Sidebar />
+                <div className="flex-1 flex items-center justify-center">
+                    <div className="flex items-center gap-3">
+                        <Loader2 size={16} className="animate-spin text-[var(--text-muted)]" />
+                        <span className="text-xs font-mono text-[var(--text-muted)]">
+                            Loading dashboard from SAGRA backend...
+                        </span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    const threatColor = THREAT_COLOR[dashboard.threat_level] || THREAT_COLOR.Low;
+
     return (
         <div className="flex h-screen overflow-hidden bg-[var(--bg)]">
-            {/* Sidebar */}
             <Sidebar />
-
-            {/* Main content */}
             <div className="flex-1 flex flex-col overflow-hidden">
 
-                {/* ── Row 1: System Status Bar ── */}
+                {/* System Status Bar */}
                 <header className="h-14 flex-shrink-0 border-b border-[var(--border)] px-6 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <div>
@@ -72,12 +108,11 @@ export default function DashboardPage() {
                             <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--text-muted)]">
                                 Threat Level
                             </span>
-                            <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-sm border ${THREAT_COLOR[status.threatLevel]}`}>
-                                {status.threatLevel}
+                            <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-sm border ${threatColor}`}>
+                                {dashboard.threat_level}
                             </span>
                         </div>
 
-                        {/* Separator */}
                         <div className="w-px h-4 bg-[var(--border)]" />
 
                         {/* System active */}
@@ -95,7 +130,6 @@ export default function DashboardPage() {
                             <span className="text-[9px] font-mono text-[var(--text-secondary)]">{clock}</span>
                         </div>
 
-                        {/* Separator */}
                         <div className="w-px h-4 bg-[var(--border)]" />
 
                         {/* Theme */}
@@ -110,12 +144,12 @@ export default function DashboardPage() {
                     </div>
                 </header>
 
-                {/* ── Scrollable body ── */}
+                {/* Scrollable body */}
                 <main className="flex-1 overflow-y-auto p-6 space-y-6">
 
-                    {/* ── Row 2: KPI Cards ── */}
+                    {/* KPI Cards */}
                     <section className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-                        {kpiMetrics.map(m => (
+                        {dashboard.kpis.map(m => (
                             <KpiCard
                                 key={m.id}
                                 label={m.label}
@@ -127,21 +161,19 @@ export default function DashboardPage() {
                         ))}
                     </section>
 
-                    {/* ── Row 3: Charts ── */}
+                    {/* Charts */}
                     <section className="grid grid-cols-3 gap-4">
-                        {/* Trend chart — 2/3 */}
                         <div className="col-span-3 xl:col-span-2">
-                            <TrendChart data={trendData} />
+                            <TrendChart data={dashboard.trend} />
                         </div>
-                        {/* Risk distribution — 1/3 */}
                         <div className="col-span-3 xl:col-span-1">
-                            <RiskDistribution data={riskDistribution} />
+                            <RiskDistribution data={dashboard.risk_distribution} />
                         </div>
                     </section>
 
-                    {/* ── Row 4: Cluster Table ── */}
+                    {/* Cluster Table */}
                     <section>
-                        <ClusterTable clusters={riskClusters} />
+                        <ClusterTable clusters={dashboard.clusters} />
                     </section>
 
                 </main>

@@ -1,35 +1,14 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import BackButton from '@/components/ui/BackButton';
 import LiveTime from '@/components/ui/LiveTime';
-import { AlertTriangle, Clock } from 'lucide-react';
+import { AlertTriangle, Clock, Loader2 } from 'lucide-react';
+import { fetchAlerts, type AlertData, type AlertsResponse } from '@/lib/api';
 
 type AlertStatus = 'active' | 'investigating' | 'resolved';
-
-interface FraudAlert {
-    alertId: string;
-    account: string;
-    riskScore: number;
-    triggerReason: string;
-    status: AlertStatus;
-    timestamp: string;
-    clusterId: string;
-}
-
-const MOCK_ALERTS: FraudAlert[] = [
-    { alertId: 'ALT-0048', account: 'A001', riskScore: 0.92, triggerReason: 'Circular fund movement detected', status: 'active', timestamp: '14:10:22', clusterId: 'CLU-001' },
-    { alertId: 'ALT-0047', account: 'A003', riskScore: 0.88, triggerReason: 'Multi-hop connection to flagged entity', status: 'investigating', timestamp: '14:08:15', clusterId: 'CLU-003' },
-    { alertId: 'ALT-0046', account: 'A002', riskScore: 0.85, triggerReason: 'Unusual transaction velocity', status: 'active', timestamp: '14:06:41', clusterId: 'CLU-001' },
-    { alertId: 'ALT-0045', account: 'B004', riskScore: 0.71, triggerReason: 'Shared device fingerprint identified', status: 'investigating', timestamp: '14:03:09', clusterId: 'CLU-002' },
-    { alertId: 'ALT-0044', account: 'A006', riskScore: 0.89, triggerReason: 'Rapid sequential transfers', status: 'active', timestamp: '13:58:52', clusterId: 'CLU-006' },
-    { alertId: 'ALT-0043', account: 'A004', riskScore: 0.91, triggerReason: 'Connected to known fraud cluster', status: 'active', timestamp: '13:54:30', clusterId: 'CLU-001' },
-    { alertId: 'ALT-0042', account: 'B008', riskScore: 0.64, triggerReason: 'Elevated outbound volume', status: 'investigating', timestamp: '13:49:18', clusterId: 'CLU-002' },
-    { alertId: 'ALT-0041', account: 'C002', riskScore: 0.43, triggerReason: 'Geographic anomaly detected', status: 'resolved', timestamp: '13:30:05', clusterId: 'CLU-005' },
-    { alertId: 'ALT-0040', account: 'A005', riskScore: 0.77, triggerReason: 'Unusual behavioural pattern', status: 'resolved', timestamp: '13:12:44', clusterId: 'CLU-001' },
-    { alertId: 'ALT-0039', account: 'B001', riskScore: 0.38, triggerReason: 'Moderate transaction frequency spike', status: 'resolved', timestamp: '12:58:01', clusterId: 'CLU-007' },
-];
 
 const STATUS_CONFIG: Record<AlertStatus, { label: string; dot: string; text: string; bg: string }> = {
     active: { label: 'Active', dot: 'bg-red-500', text: 'text-red-400', bg: 'bg-red-500/10 border-red-500/25' },
@@ -45,9 +24,43 @@ function riskColor(score: number) {
 
 export default function AlertsPage() {
     const router = useRouter();
+    const [alertsData, setAlertsData] = useState<AlertsResponse | null>(null);
+    const [loading, setLoading] = useState(true);
 
-    const active = MOCK_ALERTS.filter(a => a.status === 'active').length;
-    const investigating = MOCK_ALERTS.filter(a => a.status === 'investigating').length;
+    // Fetch alerts from backend
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const data = await fetchAlerts(50);
+                setAlertsData(data);
+            } catch (e) {
+                console.error('[Quantora] Failed to fetch alerts:', e);
+            }
+            setLoading(false);
+        };
+        load();
+        const interval = setInterval(load, 5000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // Loading state
+    if (loading || !alertsData) {
+        return (
+            <div className="flex h-screen overflow-hidden bg-[var(--bg)]">
+                <Sidebar />
+                <div className="flex-1 flex items-center justify-center">
+                    <div className="flex items-center gap-3">
+                        <Loader2 size={16} className="animate-spin text-[var(--text-muted)]" />
+                        <span className="text-xs font-mono text-[var(--text-muted)]">Loading alerts...</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    const alerts = alertsData.alerts;
+    const active = alertsData.active;
+    const investigating = alertsData.investigating;
 
     return (
         <div className="flex h-screen overflow-hidden bg-[var(--bg)]">
@@ -65,9 +78,11 @@ export default function AlertsPage() {
                             <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-sm bg-red-500/10 border border-red-500/25 text-red-400">
                                 {active} Active
                             </span>
-                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-sm bg-amber-500/10 border border-amber-500/25 text-amber-400">
-                                {investigating} Investigating
-                            </span>
+                            {investigating > 0 && (
+                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-sm bg-amber-500/10 border border-amber-500/25 text-amber-400">
+                                    {investigating} Investigating
+                                </span>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -80,83 +95,78 @@ export default function AlertsPage() {
 
                 {/* Table */}
                 <main className="flex-1 overflow-y-auto p-6">
-                    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-[11px] font-mono">
-                                <thead>
-                                    <tr className="border-b border-[var(--border)]">
-                                        {['Alert ID', 'Account', 'Risk Score', 'Trigger Reason', 'Status', 'Timestamp'].map(h => (
-                                            <th
-                                                key={h}
-                                                className="px-5 py-3 text-left text-[9px] uppercase tracking-widest text-[var(--text-muted)] font-medium whitespace-nowrap"
-                                            >
-                                                {h}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {MOCK_ALERTS.map((alert, i) => {
-                                        const st = STATUS_CONFIG[alert.status];
-                                        return (
-                                            <tr
-                                                key={alert.alertId}
-                                                onClick={() => router.push(`/analysis/${alert.clusterId}`)}
-                                                className={`border-b border-[var(--border)] hover:bg-[var(--bg)] cursor-pointer transition-colors duration-100 ${i === MOCK_ALERTS.length - 1 ? 'border-0' : ''
-                                                    }`}
-                                            >
-                                                {/* Alert ID */}
-                                                <td className="px-5 py-3.5">
-                                                    <span className="text-[var(--text-primary)] font-semibold">{alert.alertId}</span>
-                                                </td>
-
-                                                {/* Account */}
-                                                <td className="px-5 py-3.5 text-[var(--text-secondary)]">
-                                                    {alert.account}
-                                                </td>
-
-                                                {/* Risk Score */}
-                                                <td className="px-5 py-3.5">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-12 h-1 rounded-full bg-[var(--border)] overflow-hidden">
-                                                            <div
-                                                                className="h-full rounded-full"
-                                                                style={{
-                                                                    width: `${alert.riskScore * 100}%`,
-                                                                    backgroundColor: alert.riskScore >= 0.8 ? '#dc2626' : alert.riskScore >= 0.5 ? '#d97706' : '#52525b',
-                                                                }}
-                                                            />
-                                                        </div>
-                                                        <span className={`font-semibold ${riskColor(alert.riskScore)}`}>
-                                                            {alert.riskScore.toFixed(2)}
-                                                        </span>
-                                                    </div>
-                                                </td>
-
-                                                {/* Trigger Reason */}
-                                                <td className="px-5 py-3.5 text-[var(--text-secondary)] max-w-xs">
-                                                    <span className="line-clamp-1">{alert.triggerReason}</span>
-                                                </td>
-
-                                                {/* Status */}
-                                                <td className="px-5 py-3.5">
-                                                    <span className={`flex items-center gap-1.5 w-fit text-[9px] px-2 py-0.5 rounded-sm border ${st.bg}`}>
-                                                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${st.dot} ${alert.status === 'active' ? 'animate-pulse' : ''}`} />
-                                                        <span className={st.text}>{st.label}</span>
-                                                    </span>
-                                                </td>
-
-                                                {/* Timestamp */}
-                                                <td className="px-5 py-3.5 text-[var(--text-muted)]">
-                                                    {alert.timestamp}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                    {alerts.length === 0 ? (
+                        <div className="flex items-center justify-center h-full">
+                            <span className="text-xs font-mono text-[var(--text-muted)]">No fraud alerts detected.</span>
                         </div>
-                    </div>
+                    ) : (
+                        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-[11px] font-mono">
+                                    <thead>
+                                        <tr className="border-b border-[var(--border)]">
+                                            {['Alert ID', 'Account', 'Risk Score', 'Trigger Reason', 'Status', 'Timestamp'].map(h => (
+                                                <th
+                                                    key={h}
+                                                    className="px-5 py-3 text-left text-[9px] uppercase tracking-widest text-[var(--text-muted)] font-medium whitespace-nowrap"
+                                                >
+                                                    {h}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {alerts.map((alert, i) => {
+                                            const st = STATUS_CONFIG[alert.status as AlertStatus] || STATUS_CONFIG.active;
+                                            return (
+                                                <tr
+                                                    key={alert.alertId}
+                                                    onClick={() => router.push(`/analysis/${alert.clusterId}`)}
+                                                    className={`border-b border-[var(--border)] hover:bg-[var(--bg)] cursor-pointer transition-colors duration-100 ${i === alerts.length - 1 ? 'border-0' : ''
+                                                        }`}
+                                                >
+                                                    <td className="px-5 py-3.5">
+                                                        <span className="text-[var(--text-primary)] font-semibold">{alert.alertId}</span>
+                                                    </td>
+                                                    <td className="px-5 py-3.5 text-[var(--text-secondary)]">
+                                                        {alert.account}
+                                                    </td>
+                                                    <td className="px-5 py-3.5">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-12 h-1 rounded-full bg-[var(--border)] overflow-hidden">
+                                                                <div
+                                                                    className="h-full rounded-full"
+                                                                    style={{
+                                                                        width: `${alert.riskScore * 100}%`,
+                                                                        backgroundColor: alert.riskScore >= 0.8 ? '#dc2626' : alert.riskScore >= 0.5 ? '#d97706' : '#52525b',
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                            <span className={`font-semibold ${riskColor(alert.riskScore)}`}>
+                                                                {alert.riskScore.toFixed(2)}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-5 py-3.5 text-[var(--text-secondary)] max-w-xs">
+                                                        <span className="line-clamp-1">{alert.triggerReason}</span>
+                                                    </td>
+                                                    <td className="px-5 py-3.5">
+                                                        <span className={`flex items-center gap-1.5 w-fit text-[9px] px-2 py-0.5 rounded-sm border ${st.bg}`}>
+                                                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${st.dot} ${alert.status === 'active' ? 'animate-pulse' : ''}`} />
+                                                            <span className={st.text}>{st.label}</span>
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-5 py-3.5 text-[var(--text-muted)]">
+                                                        {alert.timestamp}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </main>
             </div>
         </div>

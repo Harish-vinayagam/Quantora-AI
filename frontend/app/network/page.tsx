@@ -5,16 +5,9 @@ import * as d3 from 'd3';
 import Sidebar from '@/components/Sidebar';
 import BackButton from '@/components/ui/BackButton';
 import LiveTime from '@/components/ui/LiveTime';
-import { Clock, GitBranch, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
-import {
-    initialNodes,
-    initialEdges,
-    generateNewTransaction,
-    generateNewEdge,
-    FRAUD_CLUSTER_IDS,
-    type GraphNode,
-    type GraphEdge,
-} from '@/lib/mockData';
+import { Clock, GitBranch, ZoomIn, ZoomOut, Maximize2, Loader2 } from 'lucide-react';
+import { fetchGraphData, type GraphData } from '@/lib/api';
+import { FRAUD_CLUSTER_IDS, type GraphNode, type GraphEdge } from '@/lib/mockData';
 
 // ── Colors matching existing GraphView ──
 const NODE_COLOR: Record<string, string> = { high: '#dc2626', medium: '#d97706', low: '#3b82f6' };
@@ -28,9 +21,10 @@ export default function NetworkPage() {
     const svgRef = useRef<SVGSVGElement>(null);
     const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
     const [dims, setDims] = useState({ w: 800, h: 600 });
-    const [nodes, setNodes] = useState<GraphNode[]>(initialNodes);
-    const [edges, setEdges] = useState<GraphEdge[]>(initialEdges);
+    const [nodes, setNodes] = useState<GraphNode[]>([]);
+    const [edges, setEdges] = useState<GraphEdge[]>([]);
     const [stats, setStats] = useState({ nodes: 0, edges: 0, fraud: 0 });
+    const [loading, setLoading] = useState(true);
 
     // Track container size
     useEffect(() => {
@@ -44,26 +38,27 @@ export default function NetworkPage() {
         return () => obs.disconnect();
     }, []);
 
-    // Live edge additions
+    // Fetch graph data from backend
     useEffect(() => {
-        const interval = setInterval(() => {
-            const tx = generateNewTransaction();
-            const edge = generateNewEdge(tx);
-            setEdges(prev => {
-                const exists = prev.some(e =>
-                    (e.source === edge.source && e.target === edge.target) ||
-                    (e.source === edge.target && e.target === edge.source)
-                );
-                if (exists) return prev;
-                return [...prev.slice(-45), edge];
-            });
-        }, 4000);
+        const load = async () => {
+            try {
+                const data = await fetchGraphData();
+                setNodes(data.nodes as GraphNode[]);
+                setEdges(data.edges as GraphEdge[]);
+                setStats(data.stats);
+            } catch (e) {
+                console.error('[Quantora] Failed to fetch graph data:', e);
+            }
+            setLoading(false);
+        };
+        load();
+        const interval = setInterval(load, 5000);
         return () => clearInterval(interval);
     }, []);
 
     // D3 render
     useEffect(() => {
-        if (!svgRef.current) return;
+        if (!svgRef.current || nodes.length === 0) return;
         const { w, h } = dims;
 
         const d3Nodes: D3Node[] = nodes.map(n => ({ ...n }));
@@ -76,12 +71,6 @@ export default function NetworkPage() {
                 if (!s || !t) return null;
                 return { id: e.id, source: s, target: t, amount: e.amount, risk: e.risk };
             }).filter(Boolean) as D3Link[];
-
-        setStats({
-            nodes: d3Nodes.length,
-            edges: d3Links.length,
-            fraud: d3Nodes.filter(n => n.risk === 'high').length,
-        });
 
         const svg = d3.select(svgRef.current);
         svg.selectAll('*').remove();
@@ -206,7 +195,16 @@ export default function NetworkPage() {
 
                 {/* Graph */}
                 <main ref={containerRef} className="flex-1 relative overflow-hidden">
-                    <svg ref={svgRef} className="w-full h-full" />
+                    {loading ? (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="flex items-center gap-3">
+                                <Loader2 size={16} className="animate-spin text-[var(--text-muted)]" />
+                                <span className="text-xs font-mono text-[var(--text-muted)]">Loading network graph...</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <svg ref={svgRef} className="w-full h-full" />
+                    )}
 
                     {/* Zoom controls */}
                     <div className="absolute bottom-4 right-4 flex flex-col gap-1">

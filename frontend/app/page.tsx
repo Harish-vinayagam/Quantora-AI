@@ -7,27 +7,36 @@ import GraphView from '@/components/GraphView';
 import RiskPanel from '@/components/RiskPanel';
 import MetricsFooter from '@/components/MetricsFooter';
 
-import {
-    initialTransactions,
-    initialNodes,
-    initialEdges,
-    generateNewTransaction,
-    generateNewEdge,
-    type Transaction,
-    type GraphNode,
-    type GraphEdge,
-} from '@/lib/mockData';
-
+import type { Transaction, GraphNode, GraphEdge } from '@/lib/mockData';
+import { FRAUD_CLUSTER_IDS } from '@/lib/mockData';
 import { calculateRisk, getDefaultRiskScore, type RiskScore } from '@/lib/riskEngine';
-import { predictFraud } from '@/lib/api';
+import {
+    submitTransaction,
+    fetchTransactions,
+    fetchGraphData,
+    mapApiTransaction,
+    type StoredTransaction,
+} from '@/lib/api';
+
+// ── Helpers for simulation ──
+const ALL_ACCOUNTS = [
+    'A001', 'A002', 'A003', 'A004', 'A005',
+    'B001', 'B002', 'B003', 'B004', 'B005', 'B006', 'B007', 'B008',
+    'C001', 'C002', 'C003',
+];
+const FRAUD_ACCOUNTS = ['A001', 'A002', 'A003', 'A004', 'A005'];
+
+function randomAccount(): string {
+    return ALL_ACCOUNTS[Math.floor(Math.random() * ALL_ACCOUNTS.length)];
+}
 
 const MAX_TRANSACTIONS = 50;
 
 export default function DashboardPage() {
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-    const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
-    const [nodes, setNodes] = useState<GraphNode[]>(initialNodes);
-    const [edges, setEdges] = useState<GraphEdge[]>(initialEdges);
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [nodes, setNodes] = useState<GraphNode[]>([]);
+    const [edges, setEdges] = useState<GraphEdge[]>([]);
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [riskScore, setRiskScore] = useState<RiskScore>(getDefaultRiskScore());
 
@@ -43,6 +52,23 @@ export default function DashboardPage() {
     // Set initial dark class
     useEffect(() => {
         document.documentElement.classList.add('dark');
+    }, []);
+
+    // ── Fetch initial data from backend ──
+    useEffect(() => {
+        (async () => {
+            try {
+                const [txRes, graphRes] = await Promise.all([
+                    fetchTransactions(MAX_TRANSACTIONS),
+                    fetchGraphData(),
+                ]);
+                setTransactions(txRes.transactions.map(mapApiTransaction));
+                setNodes(graphRes.nodes as GraphNode[]);
+                setEdges(graphRes.edges as GraphEdge[]);
+            } catch (e) {
+                console.error('[Quantora] Failed to fetch initial data:', e);
+            }
+        })();
     }, []);
 
     // Node selection handler
@@ -66,65 +92,41 @@ export default function DashboardPage() {
         [nodes, edges]
     );
 
-    // 3-second interval: add transaction + edge + update risk panel
-    // Also sends each transaction to the SAGRA backend for real-time scoring
+    // ── Simulation: POST new transactions every 3 seconds ──
     useEffect(() => {
-        const interval = setInterval(() => {
-            const newTx = generateNewTransaction();
-            const newEdge = generateNewEdge(newTx);
+        const interval = setInterval(async () => {
+            try {
+                let sender = randomAccount();
+                let receiver = randomAccount();
+                while (receiver === sender) receiver = randomAccount();
 
-            // Send transaction to SAGRA backend (non-blocking)
-            // The backend builds its own transaction graph and returns
-            // risk_score + fraud_prediction from the SAGRA algorithm.
-            predictFraud({
-                sender: parseInt(newTx.senderId.replace(/\D/g, '')) || 0,
-                receiver: parseInt(newTx.receiverId.replace(/\D/g, '')) || 0,
-                amount: newTx.amount,
-            }).then(result => {
-                // Enrich transaction with SAGRA backend risk score
-                const sagraRisk = result.risk_score;
-                const riskLabel = sagraRisk > 0.7 ? 'high' : sagraRisk > 0.4 ? 'medium' : 'low';
-                newTx.risk = riskLabel;
-                newTx.isFraud = result.fraud_prediction === 1;
-            }).catch(() => {
-                // Fallback: keep the locally generated risk level
-            });
+                const isFraudSender = FRAUD_ACCOUNTS.includes(sender);
+                const amount =
+                    isFraudSender && Math.random() > 0.5
+                        ? Math.floor(Math.random() * 45000) + 8000
+                        : Math.floor(Math.random() * 3000) + 100;
 
-            setTransactions(prev => [newTx, ...prev].slice(0, MAX_TRANSACTIONS));
+                const result = await submitTransaction({ sender, receiver, amount });
 
-            // Add edge (deduplicate by source+target pair to keep graph clean)
-            setEdges(prev => {
-                const exists = prev.some(
-                    e =>
-                        (e.source === newEdge.source && e.target === newEdge.target) ||
-                        (e.source === newEdge.target && e.target === newEdge.source)
-                );
-                if (exists) return prev;
-                return [...prev.slice(-40), newEdge]; // keep max 40 edges
-            });
-
-            // Update risk score if selected node is involved
-            setSelectedNodeId(prev => {
-                if (prev && (newTx.senderId === prev || newTx.receiverId === prev)) {
-                    // Trigger risk recalculation via side effect
-                    setNodes(current => {
-                        const node = current.find(n => n.id === prev);
-                        if (node) {
-                            setEdges(currentEdges => {
-                                const connectedEdges = currentEdges.filter(
-                                    e => e.source === prev || e.target === prev
-                                );
-                                const score = calculateRisk({ node, connectedEdges, allNodes: current });
-                                setRiskScore(score);
-                                return currentEdges;
-                            });
-                        }
-                        return current;
-                    });
-                }
-                return prev;
-            });
+                const newTx = mapApiTransaction(result);
+                setTransactions(prev => [newTx, ...prev].slice(0, MAX_TRANSACTIONS));
+            } catch (e) {
+                console.error('[Quantora] Failed to submit transaction:', e);
+            }
         }, 3000);
+
+        return () => clearInterval(interval);
+    }, []);
+
+    // ── Refresh graph data every 5 seconds ──
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            try {
+                const graphRes = await fetchGraphData();
+                setNodes(graphRes.nodes as GraphNode[]);
+                setEdges(graphRes.edges as GraphEdge[]);
+            } catch { /* silent */ }
+        }, 5000);
 
         return () => clearInterval(interval);
     }, []);

@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
 import BackButton from '@/components/ui/BackButton';
 import LiveTime from '@/components/ui/LiveTime';
-import { BarChart3, Clock, ShieldAlert, Activity, TrendingUp, PieChart } from 'lucide-react';
-import { initialTransactions, generateNewTransaction, type Transaction } from '@/lib/mockData';
-import { predictFraud } from '@/lib/api';
+import { BarChart3, Clock, ShieldAlert, Activity, TrendingUp, PieChart, Loader2 } from 'lucide-react';
+import { fetchTransactionStats, type TransactionStats } from '@/lib/api';
 
 // ── Stat Card ────────────────────────────────────────────────────
 function StatCard({ label, value, sub, icon: Icon, accent }: {
@@ -47,41 +46,43 @@ function DistributionBar({ label, count, total, color }: {
 }
 
 export default function AnalyticsPage() {
-    const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
+    const [stats, setStats] = useState<TransactionStats | null>(null);
+    const [loading, setLoading] = useState(true);
 
-    // Simulate live transactions arriving
+    // Fetch stats from backend
     useEffect(() => {
-        const interval = setInterval(() => {
-            const newTx = generateNewTransaction();
-            // Fire-and-forget to SAGRA backend
-            predictFraud({
-                sender: parseInt(newTx.senderId.replace(/\D/g, '')) || 0,
-                receiver: parseInt(newTx.receiverId.replace(/\D/g, '')) || 0,
-                amount: newTx.amount,
-            }).then(res => {
-                const riskLabel = res.risk_score > 0.7 ? 'high' : res.risk_score > 0.4 ? 'medium' : 'low';
-                newTx.risk = riskLabel;
-                newTx.isFraud = res.fraud_prediction === 1;
-            }).catch(() => { /* use local risk */ });
-            setTransactions(prev => [newTx, ...prev].slice(0, 200));
-        }, 3000);
+        const load = async () => {
+            try {
+                const data = await fetchTransactionStats();
+                setStats(data);
+            } catch (e) {
+                console.error('[Quantora] Failed to fetch stats:', e);
+            }
+            setLoading(false);
+        };
+        load();
+        const interval = setInterval(load, 3000);
         return () => clearInterval(interval);
     }, []);
 
-    // ── Derived metrics ──
-    const total = transactions.length;
-    const fraudCount = useMemo(() => transactions.filter(t => t.isFraud).length, [transactions]);
-    const fraudRate = total > 0 ? ((fraudCount / total) * 100).toFixed(1) : '0.0';
-    const avgRisk = useMemo(() => {
-        const riskMap = { high: 0.85, medium: 0.55, low: 0.15 };
-        const sum = transactions.reduce((s, t) => s + riskMap[t.risk], 0);
-        return total > 0 ? (sum / total).toFixed(2) : '0.00';
-    }, [transactions, total]);
+    // Loading state
+    if (loading || !stats) {
+        return (
+            <div className="flex h-screen overflow-hidden bg-[var(--bg)]">
+                <Sidebar />
+                <div className="flex-1 flex items-center justify-center">
+                    <div className="flex items-center gap-3">
+                        <Loader2 size={16} className="animate-spin text-[var(--text-muted)]" />
+                        <span className="text-xs font-mono text-[var(--text-muted)]">Loading analytics...</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
-    const highCount = useMemo(() => transactions.filter(t => t.risk === 'high').length, [transactions]);
-    const medCount = useMemo(() => transactions.filter(t => t.risk === 'medium').length, [transactions]);
-    const lowCount = useMemo(() => transactions.filter(t => t.risk === 'low').length, [transactions]);
-    const safeCount = total - fraudCount;
+    const fraudRate = stats.fraud_rate.toFixed(1);
+    const avgRisk = stats.avg_risk.toFixed(2);
+    const safeCount = stats.total - stats.fraud_count;
 
     return (
         <div className="flex h-screen overflow-hidden bg-[var(--bg)]">
@@ -108,18 +109,18 @@ export default function AnalyticsPage() {
                 {/* Content */}
                 <main className="flex-1 overflow-y-auto p-6 space-y-6">
 
-                    {/* ── KPI Row ── */}
+                    {/* KPI Row */}
                     <section className="grid grid-cols-2 xl:grid-cols-4 gap-4">
                         <StatCard
                             label="Total Transactions"
-                            value={total.toLocaleString()}
-                            sub="Tracked in session"
+                            value={stats.total.toLocaleString()}
+                            sub="From SAGRA backend"
                             icon={Activity}
                             accent="bg-blue-500/10 text-blue-400"
                         />
                         <StatCard
                             label="Fraud Detected"
-                            value={fraudCount.toLocaleString()}
+                            value={stats.fraud_count.toLocaleString()}
                             sub="Flagged by SAGRA"
                             icon={ShieldAlert}
                             accent="bg-red-500/10 text-red-400"
@@ -140,7 +141,7 @@ export default function AnalyticsPage() {
                         />
                     </section>
 
-                    {/* ── Charts Row ── */}
+                    {/* Charts Row */}
                     <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
 
                         {/* Risk Score Distribution */}
@@ -149,13 +150,13 @@ export default function AnalyticsPage() {
                                 Risk Score Distribution
                             </h3>
                             <div className="space-y-3">
-                                <DistributionBar label="High" count={highCount} total={total} color="bg-red-500" />
-                                <DistributionBar label="Medium" count={medCount} total={total} color="bg-amber-400" />
-                                <DistributionBar label="Low" count={lowCount} total={total} color="bg-zinc-500" />
+                                <DistributionBar label="High" count={stats.high_count} total={stats.total} color="bg-red-500" />
+                                <DistributionBar label="Medium" count={stats.medium_count} total={stats.total} color="bg-amber-400" />
+                                <DistributionBar label="Low" count={stats.low_count} total={stats.total} color="bg-zinc-500" />
                             </div>
                             <div className="mt-4 pt-3 border-t border-[var(--border)] flex items-center justify-between">
                                 <span className="text-[9px] font-mono text-[var(--text-muted)]">Total Scored</span>
-                                <span className="text-[11px] font-mono font-semibold text-[var(--text-primary)]">{total}</span>
+                                <span className="text-[11px] font-mono font-semibold text-[var(--text-primary)]">{stats.total}</span>
                             </div>
                         </div>
 
@@ -173,14 +174,14 @@ export default function AnalyticsPage() {
                                         <circle
                                             cx="50" cy="50" r="40"
                                             fill="none" stroke="#3f3f46" strokeWidth="10"
-                                            strokeDasharray={`${(safeCount / Math.max(total, 1)) * 251.3} 251.3`}
+                                            strokeDasharray={`${(safeCount / Math.max(stats.total, 1)) * 251.3} 251.3`}
                                         />
                                         {/* Fraud arc */}
                                         <circle
                                             cx="50" cy="50" r="40"
                                             fill="none" stroke="#dc2626" strokeWidth="10"
-                                            strokeDasharray={`${(fraudCount / Math.max(total, 1)) * 251.3} 251.3`}
-                                            strokeDashoffset={`-${(safeCount / Math.max(total, 1)) * 251.3}`}
+                                            strokeDasharray={`${(stats.fraud_count / Math.max(stats.total, 1)) * 251.3} 251.3`}
+                                            strokeDashoffset={`-${(safeCount / Math.max(stats.total, 1)) * 251.3}`}
                                         />
                                     </svg>
                                     <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -194,7 +195,7 @@ export default function AnalyticsPage() {
                             <div className="flex items-center justify-center gap-6">
                                 <div className="flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full bg-red-500" />
-                                    <span className="text-[10px] font-mono text-[var(--text-secondary)]">Fraud · {fraudCount}</span>
+                                    <span className="text-[10px] font-mono text-[var(--text-secondary)]">Fraud · {stats.fraud_count}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full bg-zinc-500" />

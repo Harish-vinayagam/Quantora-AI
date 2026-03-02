@@ -36,7 +36,9 @@ Centrality Recalculation Trade-offs:
 """
 
 import networkx as nx
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
+
+NodeId = Union[int, str]
 
 
 class TransactionGraph:
@@ -78,7 +80,7 @@ class TransactionGraph:
         """Return the number of edges in the graph."""
         return self._graph.number_of_edges()
 
-    def add_transaction(self, sender: int, receiver: int, amount: float) -> None:
+    def add_transaction(self, sender: NodeId, receiver: NodeId, amount: float) -> None:
         """
         Add a transaction edge to the graph.
 
@@ -100,7 +102,7 @@ class TransactionGraph:
         # Add or update edge with amount as weight
         self._graph.add_edge(sender, receiver, amount=amount)
 
-    def get_sender_degree(self, sender: int) -> float:
+    def get_sender_degree(self, sender: NodeId) -> float:
         """
         Compute the degree centrality of a sender node.
 
@@ -153,7 +155,7 @@ class TransactionGraph:
             "density": round(nx.density(self._graph), 6) if self.node_count > 1 else 0.0,
         }
 
-    def get_all_centralities(self) -> Dict[int, float]:
+    def get_all_centralities(self) -> Dict[NodeId, float]:
         """
         Return degree centrality for all nodes.
 
