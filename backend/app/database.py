@@ -15,11 +15,17 @@ class Base(DeclarativeBase):
 
 _settings = get_settings()
 
+# Auto-fix PostgreSQL URL for asyncpg driver
+_db_url = _settings.database_url
+if _db_url.startswith("postgresql://"):
+    _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+elif _db_url.startswith("postgres://"):
+    _db_url = _db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+
 engine = create_async_engine(
-    _settings.database_url,
+    _db_url,
     echo=_settings.debug,
-    # SQLite needs this for async
-    connect_args={"check_same_thread": False} if "sqlite" in _settings.database_url else {},
+    connect_args={"check_same_thread": False} if "sqlite" in _db_url else {},
 )
 
 async_session = async_sessionmaker(engine, expire_on_commit=False)
