@@ -2,11 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Network, Bell, Settings } from 'lucide-react';
+import { LayoutDashboard, Network, Bell, Settings, BarChart3, GitBranch, List, Brain } from 'lucide-react';
 
 const NAV_ITEMS = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Risk Intelligence', href: '/', icon: Network },
+    { label: 'Analytics', href: '/analytics', icon: BarChart3 },
+    { label: 'Network Graph', href: '/network', icon: GitBranch },
+    { label: 'Transactions', href: '/transactions', icon: List },
+    { label: 'Algorithm', href: '/algorithm', icon: Brain },
     { label: 'Alerts', href: '/alerts', icon: Bell },
     { label: 'Settings', href: '/settings', icon: Settings },
 ];
