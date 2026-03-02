@@ -6,6 +6,8 @@ node_modules/
 # Next.js build output
 /.next/
 /out/
+frontend/.next/
+frontend/node_modules/
 
 # Production build
 /build
@@ -36,3 +38,15 @@ Thumbs.db
 
 # Editor
 .vscode/settings.json
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+backend/venv/
+backend/.venv/
+*.egg-info/
+.eggs/
+dist/
+build/

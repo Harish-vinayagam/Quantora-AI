@@ -58,7 +58,7 @@ export const kpiMetrics: KpiMetric[] = [
     {
         id: 'fraud-prevented',
         label: 'Fraud Prevented',
-        value: '$4.2M',
+        value: '₹4.2M',
         rawValue: 4200000,
         change: 18.7,
         changeLabel: 'vs yesterday',
