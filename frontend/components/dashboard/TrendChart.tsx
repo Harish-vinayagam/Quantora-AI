@@ -10,10 +10,15 @@ import {
     ResponsiveContainer,
     Legend,
 } from 'recharts';
-import type { TrendDataPoint } from '@/lib/mockDashboardData';
+interface TrendPoint {
+    time: string;
+    total: number;
+    fraud: number;
+    amount: number;
+}
 
 interface TrendChartProps {
-    data: TrendDataPoint[];
+    data: TrendPoint[];
 }
 
 const CustomTooltip = ({ active, payload, label }: {
@@ -67,7 +72,7 @@ export default function TrendChart({ data }: TrendChartProps) {
                     />
                     <Line
                         type="monotone"
-                        dataKey="transactions"
+                        dataKey="total"
                         name="Transactions"
                         stroke="#3f3f46"
                         strokeWidth={1.5}
@@ -76,7 +81,7 @@ export default function TrendChart({ data }: TrendChartProps) {
                     />
                     <Line
                         type="monotone"
-                        dataKey="fraudAlerts"
+                        dataKey="fraud"
                         name="Fraud Alerts"
                         stroke="#dc2626"
                         strokeWidth={1.5}

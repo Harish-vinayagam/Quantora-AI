@@ -1,20 +1,110 @@
 // lib/api.ts
 // ============================================================
-// Production API client for the Quantora AI SAGRA backend.
+// Enterprise API client for the Quantora AI SAGRA backend.
 //
-// All data flows through the backend — no mock data.
-// Endpoints:
-//   POST /transactions        → submitTransaction()
-//   GET  /transactions        → fetchTransactions()
-//   GET  /transactions/stats  → fetchTransactionStats()
-//   GET  /graph/data          → fetchGraphData()
-//   GET  /alerts              → fetchAlerts()
-//   GET  /dashboard           → fetchDashboard()
+// All requests include JWT auth headers.
+// Auth token stored in localStorage.
 // ============================================================
 
 import type { Transaction, GraphNode, GraphEdge, RiskLevel } from '@/lib/mockData';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+
+// ─────────────────────────────────────────────────────
+// Auth Helper
+// ─────────────────────────────────────────────────────
+
+function getAuthHeaders(): Record<string, string> {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('quantora_token') : null;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+}
+
+async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+    const headers = { ...getAuthHeaders(), ...(options.headers || {}) };
+    const res = await fetch(url, { ...options, headers });
+
+    // If we get 401, redirect to login
+    if (res.status === 401 && typeof window !== 'undefined') {
+        localStorage.removeItem('quantora_token');
+        localStorage.removeItem('quantora_user');
+        window.location.href = '/login';
+        throw new Error('Session expired');
+    }
+    return res;
+}
+
+
+// ─────────────────────────────────────────────────────
+// Auth Endpoints
+// ─────────────────────────────────────────────────────
+
+export interface AuthUser {
+    id: string;
+    email: string;
+    full_name: string;
+    role: string;
+    created_at: string;
+}
+
+export interface AuthResponse {
+    user: AuthUser;
+    token: string;
+}
+
+export async function loginUser(email: string, password: string): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({ detail: 'Login failed' }));
+        throw new Error(data.detail || 'Login failed');
+    }
+    const data: AuthResponse = await res.json();
+    localStorage.setItem('quantora_token', data.token);
+    localStorage.setItem('quantora_user', JSON.stringify(data.user));
+    return data;
+}
+
+export async function registerUser(email: string, password: string, fullName: string): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, full_name: fullName }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({ detail: 'Registration failed' }));
+        throw new Error(data.detail || 'Registration failed');
+    }
+    const data: AuthResponse = await res.json();
+    localStorage.setItem('quantora_token', data.token);
+    localStorage.setItem('quantora_user', JSON.stringify(data.user));
+    return data;
+}
+
+export function logoutUser(): void {
+    localStorage.removeItem('quantora_token');
+    localStorage.removeItem('quantora_user');
+    window.location.href = '/login';
+}
+
+export function getStoredUser(): AuthUser | null {
+    if (typeof window === 'undefined') return null;
+    const raw = localStorage.getItem('quantora_user');
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { return null; }
+}
+
+export function isAuthenticated(): boolean {
+    if (typeof window === 'undefined') return false;
+    return !!localStorage.getItem('quantora_token');
+}
 
 
 // ─────────────────────────────────────────────────────
@@ -59,14 +149,17 @@ export interface GraphData {
 }
 
 export interface AlertData {
-    alertId: string;
-    account: string;
-    riskScore: number;
-    triggerReason: string;
-    status: 'active' | 'investigating' | 'resolved';
+    id: string;
+    tx_id: string;
+    type: string;
+    severity: string;
+    status: string;
     timestamp: string;
-    clusterId: string;
-    transactionId?: string;
+    sender: string;
+    receiver: string;
+    amount: number;
+    risk_score: number;
+    trigger_reason: string;
 }
 
 export interface AlertsResponse {
@@ -87,8 +180,9 @@ export interface DashboardKpi {
 
 export interface TrendPoint {
     time: string;
-    transactions: number;
-    fraudAlerts: number;
+    total: number;
+    fraud: number;
+    amount: number;
 }
 
 export interface RiskDistPoint {
@@ -99,10 +193,10 @@ export interface RiskDistPoint {
 
 export interface ClusterData {
     clusterId: string;
-    accountsInvolved: number;
-    avgRiskScore: number;
-    status: 'active' | 'monitoring' | 'contained';
-    lastActivity: string;
+    nodeCount: number;
+    riskLevel: number;
+    primaryActor: string;
+    isExpanded: boolean;
 }
 
 export interface DashboardData {
@@ -115,30 +209,22 @@ export interface DashboardData {
 
 
 // ─────────────────────────────────────────────────────
-// API Functions — Production Endpoints
+// API Functions — All Auth-Protected
 // ─────────────────────────────────────────────────────
 
-/**
- * Submit a new transaction for SAGRA scoring.
- * Returns the fully scored transaction record.
- */
 export async function submitTransaction(data: {
     sender: string;
     receiver: string;
     amount: number;
 }): Promise<StoredTransaction> {
-    const res = await fetch(`${API_BASE}/transactions`, {
+    const res = await authFetch(`${API_BASE}/transactions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
 }
 
-/**
- * Fetch stored transactions from the backend.
- */
 export async function fetchTransactions(
     limit = 50,
     fraudOnly = false,
@@ -147,25 +233,19 @@ export async function fetchTransactions(
         limit: String(limit),
         fraud_only: String(fraudOnly),
     });
-    const res = await fetch(`${API_BASE}/transactions?${params}`);
+    const res = await authFetch(`${API_BASE}/transactions?${params}`);
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
 }
 
-/**
- * Fetch KPI metrics computed from all stored transactions.
- */
 export async function fetchTransactionStats(): Promise<TransactionStats> {
-    const res = await fetch(`${API_BASE}/transactions/stats`);
+    const res = await authFetch(`${API_BASE}/transactions/stats`);
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
 }
 
-/**
- * Fetch network graph data (nodes + edges) for D3 visualization.
- */
 export async function fetchGraphData(): Promise<GraphData> {
-    const res = await fetch(`${API_BASE}/graph/data`);
+    const res = await authFetch(`${API_BASE}/graph/data`);
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
 }
@@ -189,29 +269,20 @@ export interface NodeDetail {
     recent_transactions: StoredTransaction[];
 }
 
-/**
- * Fetch detailed analytics for a single graph node.
- */
 export async function fetchNodeDetail(nodeId: string): Promise<NodeDetail> {
-    const res = await fetch(`${API_BASE}/graph/node/${nodeId}`);
+    const res = await authFetch(`${API_BASE}/graph/node/${nodeId}`);
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
 }
 
-/**
- * Fetch fraud alerts derived from high-risk transactions.
- */
 export async function fetchAlerts(limit = 50): Promise<AlertsResponse> {
-    const res = await fetch(`${API_BASE}/alerts?limit=${limit}`);
+    const res = await authFetch(`${API_BASE}/alerts?limit=${limit}`);
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
 }
 
-/**
- * Fetch full dashboard data package (KPIs, trend, distribution, clusters).
- */
 export async function fetchDashboard(): Promise<DashboardData> {
-    const res = await fetch(`${API_BASE}/dashboard`);
+    const res = await authFetch(`${API_BASE}/dashboard`);
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
 }
@@ -221,9 +292,6 @@ export async function fetchDashboard(): Promise<DashboardData> {
 // Helpers
 // ─────────────────────────────────────────────────────
 
-/**
- * Map a backend StoredTransaction to the frontend Transaction type.
- */
 export function mapApiTransaction(t: StoredTransaction): Transaction {
     return {
         id: t.id,
@@ -238,153 +306,7 @@ export function mapApiTransaction(t: StoredTransaction): Transaction {
 
 
 // ─────────────────────────────────────────────────────
-// Bank CBS Integration Types & Endpoints
-// ─────────────────────────────────────────────────────
-
-export interface BankConnectionStatus {
-    connected: boolean;
-    bank_name: string;
-    api_version: string;
-    protocol: string;
-    feed_type: string;
-    last_poll: string | null;
-    total_ingested: number;
-    uptime_seconds: number;
-    latency_ms: number;
-    error_count: number;
-    transactions_processed_by_sagra: number;
-    ingestion_active: boolean;
-}
-
-export interface PipelineStage {
-    stage: string;
-    status: string;
-    detail: string;
-    protocol?: string;
-    latency_ms?: number;
-    total_ingested?: number;
-    fraud_detected?: number;
-    avg_risk?: number;
-    clusters?: number;
-    active_alerts?: number;
-}
-
-export interface PipelineStatus {
-    pipeline: PipelineStage[];
-    overall_status: string;
-    uptime_seconds: number;
-}
-
-export interface BankFeedTransaction {
-    message_id: string;
-    instruction_id: string;
-    end_to_end_id: string;
-    creation_datetime: string;
-    channel: string;
-    debtor_account_id: string;
-    debtor_iban: string;
-    debtor_bic: string;
-    debtor_name: string;
-    creditor_account_id: string;
-    creditor_iban: string;
-    creditor_bic: string;
-    creditor_name: string;
-    amount: number;
-    currency: string;
-    merchant_category: string;
-    merchant_label: string;
-    originator_country: string;
-    beneficiary_country: string;
-    geo: { city: string; country: string; lat: number; lon: number };
-    remittance_info: string;
-    batch_id: string;
-    bank_risk_flag: boolean;
-    sagra_processed: boolean;
-}
-
-export interface BankFeedResponse {
-    feed: BankFeedTransaction[];
-    total_in_buffer: number;
-    bank_name: string;
-    feed_type: string;
-}
-
-/**
- * Fetch the bank CBS API connection status.
- */
-export async function fetchBankStatus(): Promise<BankConnectionStatus> {
-    const res = await fetch(`${API_BASE}/bank/status`);
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return await res.json();
-}
-
-/**
- * Fetch raw ISO 20022 transactions from the bank feed (pre-SAGRA).
- */
-export async function fetchBankFeed(limit = 50): Promise<BankFeedResponse> {
-    const res = await fetch(`${API_BASE}/bank/feed?limit=${limit}`);
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return await res.json();
-}
-
-/**
- * Fetch full pipeline status (Bank CBS → SAGRA → Dashboard).
- */
-export async function fetchPipelineStatus(): Promise<PipelineStatus> {
-    const res = await fetch(`${API_BASE}/pipeline/status`);
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return await res.json();
-}
-
-
-// ─────────────────────────────────────────────────────
-// Legacy Endpoints (kept for backwards compatibility)
-// ─────────────────────────────────────────────────────
-
-export interface PredictRequest {
-    sender: number;
-    receiver: number;
-    amount: number;
-}
-
-export interface PredictResponse {
-    risk_score: number;
-    fraud_prediction: number;
-}
-
-export async function predictFraud(data: PredictRequest): Promise<PredictResponse> {
-    try {
-        const res = await fetch(`${API_BASE}/predict`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        });
-        if (!res.ok) return fallbackPrediction(data.amount);
-        return await res.json();
-    } catch {
-        return fallbackPrediction(data.amount);
-    }
-}
-
-function fallbackPrediction(amount: number): PredictResponse {
-    const trs = Math.min(amount / 10000, 1);
-    const risk_score = parseFloat((trs * 0.5).toFixed(4));
-    return { risk_score, fraud_prediction: risk_score > 0.7 ? 1 : 0 };
-}
-
-export async function fetchGraphStats() {
-    try {
-        const res = await fetch(`${API_BASE}/graph/stats`);
-        if (!res.ok) return null;
-        return await res.json();
-    } catch {
-        return null;
-    }
-}
-
-
-// ─────────────────────────────────────────────────────
-// Bank Input Types & Endpoints
+// Bank Input Endpoints (Auth-Protected)
 // ─────────────────────────────────────────────────────
 
 export interface FileUploadResponse {
@@ -394,15 +316,6 @@ export interface FileUploadResponse {
     fraud_detected: number;
     avg_risk: number;
     transactions: StoredTransaction[];
-}
-
-export interface UploadRecord {
-    id: string;
-    filename: string;
-    rows_processed: number;
-    fraud_detected: number;
-    avg_risk: number;
-    timestamp: string;
 }
 
 export interface ManualTransactionRequest {
@@ -417,12 +330,10 @@ export interface ManualTransactionRequest {
 export interface BankApiConnection {
     id: string;
     bank_name: string;
-    api_key: string;
+    api_key_masked: string;
     endpoint_url: string;
     status: string;
     created_at: string;
-    last_sync: string;
-    transactions_synced: number;
 }
 
 export interface BankApiConnectionRequest {
@@ -431,89 +342,54 @@ export interface BankApiConnectionRequest {
     endpoint_url: string;
 }
 
-export interface SyncResult {
-    status: string;
-    connection_id: string;
-    bank_name: string;
-    transactions_synced: number;
-    transactions: StoredTransaction[];
-}
-
-/**
- * Upload a CSV bank statement file for batch SAGRA processing.
- */
 export async function uploadBankFile(file: File): Promise<FileUploadResponse> {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('quantora_token') : null;
     const formData = new FormData();
     formData.append('file', file);
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(`${API_BASE}/bank/input/upload`, {
         method: 'POST',
+        headers,
         body: formData,
     });
     if (!res.ok) throw new Error(`Upload error: ${res.status}`);
     return await res.json();
 }
 
-/**
- * Fetch history of file uploads.
- */
-export async function fetchUploadHistory(): Promise<{ uploads: UploadRecord[] }> {
-    const res = await fetch(`${API_BASE}/bank/input/uploads`);
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return await res.json();
-}
-
-/**
- * Submit a single manual transaction for SAGRA scoring.
- */
 export async function submitManualTransaction(data: ManualTransactionRequest): Promise<StoredTransaction> {
-    const res = await fetch(`${API_BASE}/bank/input/manual`, {
+    const res = await authFetch(`${API_BASE}/bank/input/manual`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
 }
 
-/**
- * Register a new external bank API connection.
- */
 export async function addBankConnection(data: BankApiConnectionRequest): Promise<BankApiConnection> {
-    const res = await fetch(`${API_BASE}/bank/input/connect`, {
+    const res = await authFetch(`${API_BASE}/bank/input/connect`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
 }
 
-/**
- * List all registered external bank API connections.
- */
 export async function listBankConnections(): Promise<{ connections: BankApiConnection[] }> {
-    const res = await fetch(`${API_BASE}/bank/input/connections`);
+    const res = await authFetch(`${API_BASE}/bank/input/connections`);
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
 }
 
-/**
- * Remove a bank API connection by ID.
- */
 export async function removeBankConnection(id: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/bank/input/connections/${id}`, {
+    const res = await authFetch(`${API_BASE}/bank/input/connections/${id}`, {
         method: 'DELETE',
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
 }
 
-/**
- * Trigger a manual sync from a registered bank connection.
- */
-export async function syncBankConnection(id: string): Promise<SyncResult> {
-    const res = await fetch(`${API_BASE}/bank/input/connections/${id}/sync`, {
-        method: 'POST',
-    });
+export async function fetchHealth(): Promise<Record<string, unknown>> {
+    const res = await fetch(`${API_BASE}/health`);
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
 }

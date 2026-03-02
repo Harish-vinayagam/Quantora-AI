@@ -2,111 +2,82 @@
 
 import { useState, useEffect } from 'react';
 import { Activity, Database, Network, BarChart3, CheckCircle2, Zap } from 'lucide-react';
-import { fetchPipelineStatus, fetchBankStatus, type PipelineStatus, type BankConnectionStatus } from '@/lib/api';
-
-const STAGE_ICONS = [Activity, Database, Network, BarChart3];
-
-const STATUS_COLORS: Record<string, string> = {
-    connected: '#22c55e',
-    processing: '#3b82f6',
-    active: '#8b5cf6',
-    serving: '#22c55e',
-    disconnected: '#ef4444',
-};
+import { fetchHealth } from '@/lib/api';
 
 export default function PipelineStatusBar() {
-    const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
-    const [bank, setBank] = useState<BankConnectionStatus | null>(null);
+    const [health, setHealth] = useState<Record<string, unknown> | null>(null);
 
     useEffect(() => {
         const load = async () => {
             try {
-                const [p, b] = await Promise.all([
-                    fetchPipelineStatus(),
-                    fetchBankStatus(),
-                ]);
-                setPipeline(p);
-                setBank(b);
+                const h = await fetchHealth();
+                setHealth(h);
             } catch { /* quiet */ }
         };
-
         load();
-        const interval = setInterval(load, 4000);
+        const interval = setInterval(load, 6000);
         return () => clearInterval(interval);
     }, []);
 
-    if (!pipeline || !bank) return null;
+    if (!health) return null;
+
+    const stages = [
+        { name: 'Data Input', status: 'active', icon: Activity, color: '#22c55e' },
+        { name: 'SAGRA Engine', status: 'processing', icon: Database, color: '#3b82f6' },
+        { name: 'Graph Engine', status: 'active', icon: Network, color: '#8b5cf6' },
+        { name: 'Dashboard', status: 'serving', icon: BarChart3, color: '#22c55e' },
+    ];
 
     return (
         <div className="w-full border-b border-[var(--border)] bg-[var(--surface)]">
-            {/* Pipeline flow */}
             <div className="flex items-center justify-between px-4 py-2">
                 <div className="flex items-center gap-1">
-                    {/* Bank connection badge */}
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--bg)] border border-[var(--border)]">
-                        <span
-                            className="w-1.5 h-1.5 rounded-full animate-pulse"
-                            style={{ backgroundColor: bank.connected ? '#22c55e' : '#ef4444' }}
-                        />
-                        <span className="text-[9px] font-mono text-[var(--text-secondary)]">
-                            {bank.bank_name}
-                        </span>
-                    </div>
-
-                    {/* Pipeline stages */}
-                    {pipeline.pipeline.map((stage, i) => {
-                        const Icon = STAGE_ICONS[i] || Activity;
-                        const color = STATUS_COLORS[stage.status] || '#6b7280';
-
-                        return (
-                            <div key={stage.stage} className="flex items-center gap-1">
-                                {/* Connector arrow */}
+                    {stages.map((stage, i) => (
+                        <div key={stage.name} className="flex items-center gap-1">
+                            {i > 0 && (
                                 <div className="flex items-center gap-0.5 px-1">
-                                    <div className="w-4 h-px" style={{ backgroundColor: color, opacity: 0.5 }} />
-                                    <Zap size={8} style={{ color }} />
-                                    <div className="w-4 h-px" style={{ backgroundColor: color, opacity: 0.5 }} />
+                                    <div className="w-4 h-px" style={{ backgroundColor: stage.color, opacity: 0.5 }} />
+                                    <Zap size={8} style={{ color: stage.color }} />
+                                    <div className="w-4 h-px" style={{ backgroundColor: stage.color, opacity: 0.5 }} />
                                 </div>
-
-                                {/* Stage badge */}
-                                <div
-                                    className="flex items-center gap-1.5 px-2 py-1 rounded border"
-                                    style={{ borderColor: `${color}30`, backgroundColor: `${color}08` }}
-                                >
-                                    <Icon size={10} style={{ color }} />
-                                    <span className="text-[9px] font-mono text-[var(--text-secondary)]">
-                                        {stage.stage}
-                                    </span>
-                                    <CheckCircle2 size={8} style={{ color }} />
-                                </div>
+                            )}
+                            <div
+                                className="flex items-center gap-1.5 px-2 py-1 rounded border"
+                                style={{ borderColor: `${stage.color}30`, backgroundColor: `${stage.color}08` }}
+                            >
+                                <stage.icon size={10} style={{ color: stage.color }} />
+                                <span className="text-[9px] font-mono text-[var(--text-secondary)]">
+                                    {stage.name}
+                                </span>
+                                <CheckCircle2 size={8} style={{ color: stage.color }} />
                             </div>
-                        );
-                    })}
+                        </div>
+                    ))}
                 </div>
 
-                {/* Stats strip */}
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1">
-                        <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">Latency</span>
+                        <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">Txns</span>
                         <span className="text-[9px] font-mono text-[var(--text-secondary)]">
-                            {bank.latency_ms}ms
+                            {String(health.transactions_stored || 0)}
                         </span>
                     </div>
                     <div className="flex items-center gap-1">
-                        <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">Ingested</span>
+                        <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">Nodes</span>
                         <span className="text-[9px] font-mono text-[var(--text-secondary)]">
-                            {bank.total_ingested}
+                            {String(health.graph_nodes || 0)}
                         </span>
                     </div>
                     <div className="flex items-center gap-1">
-                        <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">Protocol</span>
+                        <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">Alerts</span>
                         <span className="text-[9px] font-mono text-[var(--text-secondary)]">
-                            {bank.protocol}
+                            {String(health.active_alerts || 0)}
                         </span>
                     </div>
                     <div className="flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                         <span className="text-[9px] font-mono text-green-400">
-                            {pipeline.overall_status.toUpperCase()}
+                            {String(health.status || 'UNKNOWN').toUpperCase()}
                         </span>
                     </div>
                 </div>

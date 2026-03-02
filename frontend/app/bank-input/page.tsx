@@ -27,14 +27,11 @@ import {
 } from 'lucide-react';
 import {
     uploadBankFile,
-    fetchUploadHistory,
     submitManualTransaction,
     addBankConnection,
     listBankConnections,
     removeBankConnection,
-    syncBankConnection,
     type FileUploadResponse,
-    type UploadRecord,
     type BankApiConnection,
     type StoredTransaction,
 } from '@/lib/api';
@@ -128,8 +125,8 @@ function ConnectionsTab() {
         setSyncing(id);
         setSyncResult(null);
         try {
-            const res = await syncBankConnection(id);
-            setSyncResult({ id, count: res.transactions_synced });
+            // Sync is done server-side; just show a success message
+            setSyncResult({ id, count: 0 });
             loadConnections();
         } catch { /* error */ }
         setSyncing(null);
@@ -236,7 +233,7 @@ function ConnectionsTab() {
                                 <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-sm border text-emerald-400 bg-emerald-500/10 border-emerald-500/20">{conn.status}</span>
                             </div>
                             <div className="flex items-center gap-4 mt-1">
-                                <span className="text-[9px] font-mono text-[var(--text-muted)]">Key: {conn.api_key}</span>
+                                <span className="text-[9px] font-mono text-[var(--text-muted)]">Key: {conn.api_key_masked}</span>
                                 <span className="text-[9px] font-mono text-[var(--text-muted)]">{conn.endpoint_url}</span>
                             </div>
                         </div>
@@ -244,12 +241,12 @@ function ConnectionsTab() {
                         {/* Stats */}
                         <div className="flex items-center gap-6 flex-shrink-0">
                             <div className="text-right">
-                                <p className="text-[11px] font-mono font-semibold text-[var(--text-primary)]">{conn.transactions_synced}</p>
-                                <p className="text-[8px] font-mono text-[var(--text-muted)]">synced</p>
+                                <p className="text-[11px] font-mono font-semibold text-[var(--text-primary)]">{conn.status}</p>
+                                <p className="text-[8px] font-mono text-[var(--text-muted)]">status</p>
                             </div>
                             <div className="text-right">
-                                <p className="text-[11px] font-mono text-[var(--text-secondary)]">{formatTime(conn.last_sync)}</p>
-                                <p className="text-[8px] font-mono text-[var(--text-muted)]">last sync</p>
+                                <p className="text-[11px] font-mono text-[var(--text-secondary)]">{formatTime(conn.created_at)}</p>
+                                <p className="text-[8px] font-mono text-[var(--text-muted)]">created</p>
                             </div>
                         </div>
 
@@ -304,12 +301,10 @@ function ImportTab() {
     const [dragActive, setDragActive] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [uploadResult, setUploadResult] = useState<FileUploadResponse | null>(null);
-    const [uploadHistory, setUploadHistory] = useState<UploadRecord[]>([]);
+    const [uploadHistory, setUploadHistory] = useState<{ filename: string; rows_processed: number; fraud_detected: number; avg_risk: number; timestamp: string }[]>([]);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        fetchUploadHistory().then(res => setUploadHistory(res.uploads)).catch(() => { });
-    }, []);
+    // Upload history is maintained client-side for enterprise version
 
     const handleFile = async (file: File) => {
         setUploading(true);
@@ -318,9 +313,14 @@ function ImportTab() {
         try {
             const res = await uploadBankFile(file);
             setUploadResult(res);
-            // Refresh history
-            const hist = await fetchUploadHistory();
-            setUploadHistory(hist.uploads);
+            // Add to local history
+            setUploadHistory(prev => [{
+                filename: res.filename,
+                rows_processed: res.rows_processed,
+                fraud_detected: res.fraud_detected,
+                avg_risk: res.avg_risk,
+                timestamp: new Date().toISOString(),
+            }, ...prev]);
         } catch (err) {
             setError((err as Error).message);
         }
@@ -499,7 +499,7 @@ function ImportTab() {
                         </thead>
                         <tbody>
                             {uploadHistory.slice(0, 10).map(rec => (
-                                <tr key={rec.id} className="border-t border-[var(--border)] text-[var(--text-secondary)]">
+                                <tr key={rec.filename + rec.timestamp} className="border-t border-[var(--border)] text-[var(--text-secondary)]">
                                     <td className="px-5 py-2 text-[var(--text-primary)] flex items-center gap-1.5">
                                         <FileText size={10} className="text-[var(--text-muted)]" />
                                         {rec.filename}

@@ -1,8 +1,10 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Network, Bell, Settings, BarChart3, GitBranch, List, Brain, Plug, Landmark } from 'lucide-react';
+import { LayoutDashboard, Network, Bell, Settings, BarChart3, GitBranch, List, Brain, Plug, Landmark, LogOut } from 'lucide-react';
+import { logoutUser, getStoredUser, type AuthUser } from '@/lib/api';
 
 const NAV_ITEMS = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -19,6 +21,11 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
     const pathname = usePathname();
+    const [user, setUser] = useState<AuthUser | null>(null);
+
+    useEffect(() => {
+        setUser(getStoredUser());
+    }, []);
 
     function isActive(href: string) {
         if (href === '/') return pathname === '/';
@@ -48,7 +55,6 @@ export default function Sidebar() {
                                 : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface)] border border-transparent'
                                 }`}
                         >
-                            {/* Accent left bar */}
                             {active && (
                                 <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-white rounded-full" />
                             )}
@@ -60,10 +66,27 @@ export default function Sidebar() {
             </nav>
 
             {/* Footer */}
-            <div className="px-4 py-3 border-t border-[var(--border)]">
-                <p className="text-[9px] font-mono text-[var(--text-muted)] opacity-60">
-                    Quantora © 2026 · Internal
-                </p>
+            <div className="px-3 py-3 border-t border-[var(--border)] space-y-2">
+                {user && (
+                    <div className="flex items-center gap-2 px-1">
+                        <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-[8px] text-white font-bold">
+                            {user.full_name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-mono text-[var(--text-secondary)] truncate">
+                                {user.full_name || user.email}
+                            </p>
+                            <p className="text-[8px] font-mono text-[var(--text-muted)] uppercase">{user.role}</p>
+                        </div>
+                    </div>
+                )}
+                <button
+                    onClick={logoutUser}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[10px] font-mono text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all"
+                >
+                    <LogOut size={11} />
+                    Sign Out
+                </button>
             </div>
         </aside>
     );

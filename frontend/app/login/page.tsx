@@ -1,137 +1,174 @@
 'use client';
 
 import { useState } from 'react';
-import { Shield } from 'lucide-react';
-import LoginForm from '@/components/auth/LoginForm';
-import MfaForm from '@/components/auth/MfaForm';
-
-type AuthStep = 'credentials' | 'mfa' | 'success';
+import { useRouter } from 'next/navigation';
+import { loginUser, registerUser } from '@/lib/api';
+import { Eye, EyeOff, ArrowRight, AlertCircle, Activity } from 'lucide-react';
 
 export default function LoginPage() {
-    const [step, setStep] = useState<AuthStep>('credentials');
-    const [sessionToken, setSessionToken] = useState('');
-    const [identifier, setIdentifier] = useState('');
+    const router = useRouter();
+    const [isRegister, setIsRegister] = useState(false);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [fullName, setFullName] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
-    const handleCredentialsSuccess = (token: string, id: string) => {
-        setSessionToken(token);
-        setIdentifier(id);
-        setStep('mfa');
-    };
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
 
-    const handleMfaSuccess = (_accessToken: string) => {
-        setStep('success');
-        // In production: store accessToken in a secure cookie / context and redirect.
-        // e.g. router.push('/dashboard')
-        setTimeout(() => {
-            window.location.href = '/dashboard';
-        }, 1800);
-    };
-
-    const handleBack = () => {
-        setStep('credentials');
-        setSessionToken('');
+        try {
+            if (isRegister) {
+                await registerUser(email, password, fullName);
+            } else {
+                await loginUser(email, password);
+            }
+            router.push('/dashboard');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Authentication failed');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
-        <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center px-4">
-            {/* Card */}
-            <div className="w-full max-w-sm animate-fade-in">
+        <div className="min-h-screen bg-[var(--bg)] flex items-center justify-center p-4">
+            {/* Subtle grid background */}
+            <div className="fixed inset-0 pointer-events-none opacity-[0.02]"
+                style={{
+                    backgroundImage: `linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)`,
+                    backgroundSize: '40px 40px',
+                }}
+            />
 
-                {/* Header */}
-                <div className="mb-8 text-center">
-                    <div className="flex items-center justify-center gap-2 mb-3">
-                        <div className="w-6 h-6 bg-white rounded-sm flex items-center justify-center">
-                            <div className="w-3 h-3 bg-[var(--bg)] rounded-[2px]" />
-                        </div>
-                        <span className="text-white font-semibold text-lg tracking-tight">Quantora</span>
+            <div className="w-full max-w-sm relative z-10">
+                {/* Logo — matches Sidebar Quantora branding */}
+                <div className="flex items-center justify-center gap-3 mb-10">
+                    <div className="w-8 h-8 bg-white rounded-sm flex items-center justify-center flex-shrink-0">
+                        <div className="w-4 h-4 bg-[var(--bg)] rounded-[2px]" />
                     </div>
-                    <p className="text-[11px] font-mono text-[var(--text-muted)] tracking-widest uppercase">
-                        Network Risk Intelligence
-                    </p>
+                    <div>
+                        <span className="text-[var(--text-primary)] font-semibold text-base tracking-tight">Quantora</span>
+                        <span className="text-[9px] font-mono text-[var(--text-muted)] ml-2 uppercase tracking-widest">v3.0</span>
+                    </div>
                 </div>
 
-                {/* Authentication card */}
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-7 shadow-sm">
-
-                    {/* Step indicator title */}
-                    <div className="mb-6">
-                        <div className="flex items-center gap-2 mb-1">
-                            <Shield size={14} strokeWidth={1.5} className="text-[var(--text-muted)]" />
-                            <h1 className="text-sm font-semibold text-[var(--text-primary)]">
-                                {step === 'credentials' && 'Sign In'}
-                                {step === 'mfa' && 'Two-Factor Verification'}
-                                {step === 'success' && 'Access Granted'}
-                            </h1>
+                {/* Card */}
+                <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-6">
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h2 className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-widest">
+                                {isRegister ? 'Create Account' : 'Sign In'}
+                            </h2>
+                            <p className="text-[10px] font-mono text-[var(--text-muted)] mt-0.5">
+                                {isRegister ? 'Register for SAGRA platform access' : 'Enterprise Fraud Intelligence Platform'}
+                            </p>
                         </div>
-                        <p className="text-[10px] font-mono text-[var(--text-muted)] ml-5">
-                            {step === 'credentials' && 'Enter your credentials to continue'}
-                            {step === 'mfa' && 'Step 2 of 2 — Verify your identity'}
-                            {step === 'success' && 'Redirecting to dashboard...'}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                            <span className="relative flex h-1.5 w-1.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                            </span>
+                            <span className="text-[9px] font-mono text-emerald-400">Online</span>
+                        </div>
                     </div>
 
-                    {/* Step progress dots */}
-                    <div className="flex items-center gap-1.5 mb-6 ml-5">
-                        {(['credentials', 'mfa'] as const).map((s, i) => (
-                            <span
-                                key={s}
-                                className={`h-1 rounded-full transition-all duration-300 ${step === 'success' || (step === 'mfa' && i === 0) || (step === s)
-                                    ? step === s || step === 'success'
-                                        ? 'w-4 bg-white'
-                                        : 'w-4 bg-zinc-500'
-                                    : 'w-2 bg-zinc-700'
-                                    }`}
-                            />
-                        ))}
-                    </div>
-
-                    {/* Form content */}
-                    {step === 'credentials' && (
-                        <LoginForm onSuccess={handleCredentialsSuccess} />
+                    {error && (
+                        <div className="flex items-center gap-2 p-2.5 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-[11px] font-mono mb-4">
+                            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                            {error}
+                        </div>
                     )}
 
-                    {step === 'mfa' && (
-                        <MfaForm
-                            sessionToken={sessionToken}
-                            identifier={identifier}
-                            onSuccess={handleMfaSuccess}
-                            onBack={handleBack}
-                        />
-                    )}
-
-                    {step === 'success' && (
-                        <div className="text-center py-4 space-y-3 animate-fade-in">
-                            <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto">
-                                <Shield size={18} strokeWidth={1.5} className="text-emerald-400" />
-                            </div>
+                    <form onSubmit={handleSubmit} className="space-y-3">
+                        {isRegister && (
                             <div>
-                                <p className="text-sm font-semibold text-[var(--text-primary)]">Authenticated</p>
-                                <p className="text-[11px] font-mono text-[var(--text-muted)] mt-1">
-                                    Redirecting to dashboard...
-                                </p>
+                                <label className="block text-[9px] font-mono uppercase tracking-widest text-[var(--text-muted)] mb-1.5">Full Name</label>
+                                <input
+                                    type="text"
+                                    value={fullName}
+                                    onChange={(e) => setFullName(e.target.value)}
+                                    placeholder="SAGRA Admin"
+                                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded-md text-[12px] font-mono text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-zinc-500 transition-colors"
+                                    required
+                                />
                             </div>
-                            <div className="flex justify-center">
-                                <span className="w-4 h-4 border-2 border-zinc-600 border-t-white rounded-full animate-spin" />
+                        )}
+
+                        <div>
+                            <label className="block text-[9px] font-mono uppercase tracking-widest text-[var(--text-muted)] mb-1.5">Email</label>
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="admin@quantora.ai"
+                                className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded-md text-[12px] font-mono text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-zinc-500 transition-colors"
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-[9px] font-mono uppercase tracking-widest text-[var(--text-muted)] mb-1.5">Password</label>
+                            <div className="relative">
+                                <input
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder="••••••••"
+                                    className="w-full px-3 py-2 pr-9 bg-[var(--bg)] border border-[var(--border)] rounded-md text-[12px] font-mono text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-zinc-500 transition-colors"
+                                    required
+                                    minLength={6}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                                >
+                                    {showPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+                                </button>
                             </div>
                         </div>
-                    )}
-                </div>
 
-                {/* Security note */}
-                <div className="mt-5 text-center space-y-1">
-                    <div className="flex items-center justify-center gap-1.5">
-                        <Shield size={10} strokeWidth={1.5} className="text-[var(--text-muted)]" />
-                        <p className="text-[9px] font-mono text-[var(--text-muted)]">
-                            Protected by enterprise-grade encryption
-                        </p>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 mt-2 bg-white text-[var(--bg)] rounded-md text-[11px] font-mono font-semibold uppercase tracking-widest hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
+                        >
+                            {loading ? (
+                                <div className="w-3.5 h-3.5 border-2 border-[var(--bg)]/30 border-t-[var(--bg)] rounded-full animate-spin" />
+                            ) : (
+                                <>
+                                    {isRegister ? 'Create Account' : 'Authenticate'}
+                                    <ArrowRight size={12} strokeWidth={2} />
+                                </>
+                            )}
+                        </button>
+                    </form>
+
+                    <div className="mt-5 pt-4 border-t border-[var(--border)] text-center">
+                        <button
+                            onClick={() => { setIsRegister(!isRegister); setError(''); }}
+                            className="text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                        >
+                            {isRegister
+                                ? '← Back to sign in'
+                                : "Don't have credentials? Register →"}
+                        </button>
                     </div>
                 </div>
 
-                {/* Footer */}
-                <div className="mt-4 text-center">
-                    <p className="text-[9px] font-mono text-[var(--text-muted)] opacity-60">
-                        Quantora © 2026 &nbsp;·&nbsp; Internal Use Only
-                    </p>
+                {/* Footer info */}
+                <div className="mt-6 flex items-center justify-center gap-4">
+                    <div className="flex items-center gap-1.5">
+                        <Activity size={10} className="text-[var(--text-muted)]" />
+                        <span className="text-[9px] font-mono text-[var(--text-muted)]">SAGRA v2.0</span>
+                    </div>
+                    <div className="w-px h-3 bg-[var(--border)]" />
+                    <span className="text-[9px] font-mono text-[var(--text-muted)]">Sentinel Adaptive Graph Risk Algorithm</span>
                 </div>
             </div>
         </div>

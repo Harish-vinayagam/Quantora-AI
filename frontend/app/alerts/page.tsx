@@ -105,7 +105,7 @@ export default function AlertsPage() {
                                 <table className="w-full text-[11px] font-mono">
                                     <thead>
                                         <tr className="border-b border-[var(--border)]">
-                                            {['Alert ID', 'Account', 'Risk Score', 'Trigger Reason', 'Status', 'Timestamp'].map(h => (
+                                            {['Alert ID', 'Type', 'Sender → Receiver', 'Amount', 'Risk Score', 'Reason', 'Status', 'Time'].map(h => (
                                                 <th
                                                     key={h}
                                                     className="px-5 py-3 text-left text-[9px] uppercase tracking-widest text-[var(--text-muted)] font-medium whitespace-nowrap"
@@ -120,16 +120,25 @@ export default function AlertsPage() {
                                             const st = STATUS_CONFIG[alert.status as AlertStatus] || STATUS_CONFIG.active;
                                             return (
                                                 <tr
-                                                    key={alert.alertId}
-                                                    onClick={() => router.push(`/analysis/${alert.clusterId}`)}
+                                                    key={alert.id}
                                                     className={`border-b border-[var(--border)] hover:bg-[var(--bg)] cursor-pointer transition-colors duration-100 ${i === alerts.length - 1 ? 'border-0' : ''
                                                         }`}
                                                 >
                                                     <td className="px-5 py-3.5">
-                                                        <span className="text-[var(--text-primary)] font-semibold">{alert.alertId}</span>
+                                                        <span className="text-[var(--text-primary)] font-semibold">{alert.id}</span>
+                                                    </td>
+                                                    <td className="px-5 py-3.5">
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-red-500/10 border border-red-500/25 text-red-400">
+                                                            {alert.type || 'fraud'}
+                                                        </span>
                                                     </td>
                                                     <td className="px-5 py-3.5 text-[var(--text-secondary)]">
-                                                        {alert.account}
+                                                        <span>{alert.sender}</span>
+                                                        <span className="text-[var(--text-muted)] mx-1">→</span>
+                                                        <span>{alert.receiver}</span>
+                                                    </td>
+                                                    <td className="px-5 py-3.5 text-[var(--text-secondary)]">
+                                                        ₹{(alert.amount || 0).toLocaleString()}
                                                     </td>
                                                     <td className="px-5 py-3.5">
                                                         <div className="flex items-center gap-2">
@@ -137,18 +146,18 @@ export default function AlertsPage() {
                                                                 <div
                                                                     className="h-full rounded-full"
                                                                     style={{
-                                                                        width: `${alert.riskScore * 100}%`,
-                                                                        backgroundColor: alert.riskScore >= 0.8 ? '#dc2626' : alert.riskScore >= 0.5 ? '#d97706' : '#52525b',
+                                                                        width: `${(alert.risk_score || 0) * 100}%`,
+                                                                        backgroundColor: (alert.risk_score || 0) >= 0.8 ? '#dc2626' : (alert.risk_score || 0) >= 0.5 ? '#d97706' : '#52525b',
                                                                     }}
                                                                 />
                                                             </div>
-                                                            <span className={`font-semibold ${riskColor(alert.riskScore)}`}>
-                                                                {alert.riskScore.toFixed(2)}
+                                                            <span className={`font-semibold ${riskColor(alert.risk_score || 0)}`}>
+                                                                {(alert.risk_score || 0).toFixed(2)}
                                                             </span>
                                                         </div>
                                                     </td>
                                                     <td className="px-5 py-3.5 text-[var(--text-secondary)] max-w-xs">
-                                                        <span className="line-clamp-1">{alert.triggerReason}</span>
+                                                        <span className="line-clamp-1">{alert.trigger_reason}</span>
                                                     </td>
                                                     <td className="px-5 py-3.5">
                                                         <span className={`flex items-center gap-1.5 w-fit text-[9px] px-2 py-0.5 rounded-sm border ${st.bg}`}>
@@ -157,7 +166,7 @@ export default function AlertsPage() {
                                                         </span>
                                                     </td>
                                                     <td className="px-5 py-3.5 text-[var(--text-muted)]">
-                                                        {alert.timestamp}
+                                                        {new Date(alert.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
                                                     </td>
                                                 </tr>
                                             );

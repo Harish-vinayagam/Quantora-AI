@@ -17,7 +17,6 @@ import {
 import {
     submitManualTransaction,
     addBankConnection,
-    syncBankConnection,
     uploadBankFile,
     type StoredTransaction,
 } from '@/lib/api';
@@ -163,19 +162,26 @@ export default function SimulationOverlay() {
 
                 // ~30% chance: Sync a random bank connection
                 if (action < 0.3 && connIdsRef.current.length > 0) {
-                    const connId = connIdsRef.current[Math.floor(Math.random() * connIdsRef.current.length)];
-                    const bankName = BANK_CONFIGS[connIdsRef.current.indexOf(connId)]?.bank_name || 'Bank';
-                    addLog('info', `Syncing ${bankName}...`);
-                    const res = await syncBankConnection(connId);
-                    const fraudCount = res.transactions.filter((t: StoredTransaction) => t.is_fraud).length;
-                    addLog('sync', `↻ ${bankName}: ${res.transactions_synced} transactions synced`);
-                    if (fraudCount > 0) {
-                        addLog('fraud', `⚠ ${fraudCount} fraud alert${fraudCount > 1 ? 's' : ''} from ${bankName}!`);
+                    // Submit a batch of transactions instead of sync
+                    const batchSize = Math.floor(Math.random() * 3) + 2;
+                    const bankName = BANK_CONFIGS[Math.floor(Math.random() * BANK_CONFIGS.length)]?.bank_name || 'Bank';
+                    addLog('info', `Processing batch from ${bankName}...`);
+                    let batchFraud = 0;
+                    for (let j = 0; j < batchSize; j++) {
+                        let s = randomAccount(), r = randomAccount();
+                        while (r === s) r = randomAccount();
+                        const a = randomAmount();
+                        const tx = await submitManualTransaction({ sender: s, receiver: r, amount: a, description: randomDesc() });
+                        if (tx.is_fraud) batchFraud++;
+                    }
+                    addLog('sync', `↻ ${bankName}: ${batchSize} transactions processed`);
+                    if (batchFraud > 0) {
+                        addLog('fraud', `⚠ ${batchFraud} fraud alert${batchFraud > 1 ? 's' : ''} from ${bankName}!`);
                     }
                     setStats(s => ({
                         ...s,
-                        txCount: s.txCount + res.transactions_synced,
-                        fraudCount: s.fraudCount + fraudCount,
+                        txCount: s.txCount + batchSize,
+                        fraudCount: s.fraudCount + batchFraud,
                     }));
                 }
                 // ~70% chance: Submit manual transaction
