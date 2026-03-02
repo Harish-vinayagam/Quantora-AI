@@ -178,6 +178,8 @@ For **DigitHon 3.0**, we are implementing:
 - [x] Adaptive risk threshold logic
 - [x] Live dashboard with explanation trace
 
+
+
 > Designed for scalable integration into real-world banking systems.
 
 ---
