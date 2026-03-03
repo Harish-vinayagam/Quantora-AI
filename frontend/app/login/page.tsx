@@ -2,15 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { loginUser, registerUser } from '@/lib/api';
+import { loginUser } from '@/lib/api';
 import { Eye, EyeOff, ArrowRight, AlertCircle, Activity } from 'lucide-react';
 
 export default function LoginPage() {
     const router = useRouter();
-    const [isRegister, setIsRegister] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [fullName, setFullName] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -21,11 +19,7 @@ export default function LoginPage() {
         setLoading(true);
 
         try {
-            if (isRegister) {
-                await registerUser(email, password, fullName);
-            } else {
-                await loginUser(email, password);
-            }
+            await loginUser(email, password);
             router.push('/dashboard');
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Authentication failed');
@@ -62,10 +56,10 @@ export default function LoginPage() {
                     <div className="flex items-center justify-between mb-6">
                         <div>
                             <h2 className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-widest">
-                                {isRegister ? 'Create Account' : 'Sign In'}
+                                Sign In
                             </h2>
                             <p className="text-[10px] font-mono text-[var(--text-muted)] mt-0.5">
-                                {isRegister ? 'Register for SAGRA platform access' : 'Enterprise Fraud Intelligence Platform'}
+                                Enterprise Fraud Intelligence Platform
                             </p>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -85,20 +79,6 @@ export default function LoginPage() {
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-3">
-                        {isRegister && (
-                            <div>
-                                <label className="block text-[9px] font-mono uppercase tracking-widest text-[var(--text-muted)] mb-1.5">Full Name</label>
-                                <input
-                                    type="text"
-                                    value={fullName}
-                                    onChange={(e) => setFullName(e.target.value)}
-                                    placeholder="SAGRA Admin"
-                                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded-md text-[12px] font-mono text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-zinc-500 transition-colors"
-                                    required
-                                />
-                            </div>
-                        )}
-
                         <div>
                             <label className="block text-[9px] font-mono uppercase tracking-widest text-[var(--text-muted)] mb-1.5">Email</label>
                             <input
@@ -142,22 +122,29 @@ export default function LoginPage() {
                                 <div className="w-3.5 h-3.5 border-2 border-[var(--bg)]/30 border-t-[var(--bg)] rounded-full animate-spin" />
                             ) : (
                                 <>
-                                    {isRegister ? 'Create Account' : 'Authenticate'}
+                                    Authenticate
                                     <ArrowRight size={12} strokeWidth={2} />
                                 </>
                             )}
                         </button>
                     </form>
 
-                    <div className="mt-5 pt-4 border-t border-[var(--border)] text-center">
-                        <button
-                            onClick={() => { setIsRegister(!isRegister); setError(''); }}
-                            className="text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-                        >
-                            {isRegister
-                                ? '← Back to sign in'
-                                : "Don't have credentials? Register →"}
-                        </button>
+                    {/* Credential hint */}
+                    <div className="mt-5 pt-4 border-t border-[var(--border)]">
+                        <p className="text-[9px] font-mono text-[var(--text-muted)] uppercase tracking-widest mb-2">Authorized Credentials</p>
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-[10px] font-mono text-[var(--text-secondary)]">
+                                <span className="text-amber-400/80">Admin</span>
+                                <span>admin@quantora.ai</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] font-mono text-[var(--text-secondary)]">
+                                <span className="text-blue-400/80">Analyst</span>
+                                <span>analyst@quantora.ai</span>
+                            </div>
+                            <p className="text-[9px] font-mono text-[var(--text-muted)] mt-1">
+                                Password: quantora2024
+                            </p>
+                        </div>
                     </div>
                 </div>
 

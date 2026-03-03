@@ -54,7 +54,7 @@ app.add_middleware(
 
 
 # ── Mount Routers ──
-from app.routers import auth, transactions, graph, alerts, dashboard, bank_input
+from app.routers import auth, transactions, graph, alerts, dashboard, bank_input, admin
 
 app.include_router(auth.router)
 app.include_router(transactions.router)
@@ -62,6 +62,7 @@ app.include_router(graph.router)
 app.include_router(alerts.router)
 app.include_router(dashboard.router)
 app.include_router(bank_input.router)
+app.include_router(admin.router)
 
 
 # ── Health Check ──
@@ -99,9 +100,12 @@ async def health_check():
 # ── Startup ──
 @app.on_event("startup")
 async def startup():
-    """Initialize database and optionally seed data."""
+    """Initialize database, create default accounts, and optionally seed data."""
     await init_db()
     logger.info("Database initialized")
+
+    # ── Create default accounts (idempotent) ──
+    await _create_default_accounts()
 
     if settings.seed_data:
         logger.info("SEED_DATA=true — loading seed data...")
@@ -110,6 +114,49 @@ async def startup():
         logger.info("Enterprise mode — empty database, awaiting real data input")
 
     logger.info("Quantora AI Enterprise started on port 8000")
+
+
+async def _create_default_accounts():
+    """Create admin and analyst accounts if they don't exist."""
+    from sqlalchemy import select
+    from app.database import async_session
+    from app.models.user import User
+    from app.auth import hash_password
+
+    DEFAULT_USERS = [
+        {
+            "id": "USR-ADMIN-001",
+            "email": "admin@quantora.ai",
+            "password": "quantora2024",
+            "full_name": "SAGRA Admin",
+            "role": "admin",
+        },
+        {
+            "id": "USR-ANALYST-001",
+            "email": "analyst@quantora.ai",
+            "password": "quantora2024",
+            "full_name": "Risk Analyst",
+            "role": "analyst",
+        },
+    ]
+
+    async with async_session() as db:
+        for u in DEFAULT_USERS:
+            existing = await db.execute(select(User).where(User.email == u["email"]))
+            if existing.scalar_one_or_none():
+                logger.info(f"Account {u['email']} already exists — skipping")
+                continue
+
+            user = User(
+                id=u["id"],
+                email=u["email"],
+                password_hash=hash_password(u["password"]),
+                full_name=u["full_name"],
+                role=u["role"],
+            )
+            db.add(user)
+            await db.commit()
+            logger.info(f"Created default account: {u['email']} ({u['role']})")
 
 
 async def _run_seed():

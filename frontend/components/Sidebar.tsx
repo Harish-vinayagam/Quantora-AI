@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Network, Bell, Settings, BarChart3, GitBranch, List, Brain, Plug, Landmark, LogOut } from 'lucide-react';
+import { LayoutDashboard, Network, Bell, Settings, BarChart3, GitBranch, List, Brain, Plug, Landmark, LogOut, ShieldCheck } from 'lucide-react';
 import { logoutUser, getStoredUser, type AuthUser } from '@/lib/api';
 
 const NAV_ITEMS = [
@@ -63,20 +63,47 @@ export default function Sidebar() {
                         </Link>
                     );
                 })}
+
+                {/* Admin Console — only for admins */}
+                {user?.role === 'admin' && (
+                    <>
+                        <div className="pt-2 pb-1 px-3">
+                            <div className="border-t border-[var(--border)]" />
+                        </div>
+                        <Link
+                            href="/admin"
+                            className={`relative flex items-center gap-2.5 px-3 py-2 rounded-md text-[11px] font-mono transition-all duration-150 ${pathname === '/admin'
+                                    ? 'bg-amber-500/10 text-amber-400 font-semibold border border-amber-500/20'
+                                    : 'text-amber-400/60 hover:text-amber-400 hover:bg-amber-500/10 border border-transparent'
+                                }`}
+                        >
+                            {pathname === '/admin' && (
+                                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-amber-400 rounded-full" />
+                            )}
+                            <ShieldCheck size={13} strokeWidth={pathname === '/admin' ? 2 : 1.5} />
+                            Admin Console
+                        </Link>
+                    </>
+                )}
             </nav>
 
             {/* Footer */}
             <div className="px-3 py-3 border-t border-[var(--border)] space-y-2">
                 {user && (
                     <div className="flex items-center gap-2 px-1">
-                        <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-[8px] text-white font-bold">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] text-white font-bold ${user.role === 'admin' ? 'bg-gradient-to-br from-amber-500 to-orange-600' : 'bg-gradient-to-br from-blue-500 to-violet-600'
+                            }`}>
                             {user.full_name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="text-[10px] font-mono text-[var(--text-secondary)] truncate">
                                 {user.full_name || user.email}
                             </p>
-                            <p className="text-[8px] font-mono text-[var(--text-muted)] uppercase">{user.role}</p>
+                            <span className={`inline-flex items-center gap-0.5 text-[7px] font-mono uppercase tracking-widest ${user.role === 'admin' ? 'text-amber-400' : 'text-blue-400'
+                                }`}>
+                                {user.role === 'admin' ? <ShieldCheck size={7} /> : null}
+                                {user.role}
+                            </span>
                         </div>
                     </div>
                 )}
