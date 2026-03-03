@@ -14,7 +14,7 @@ const CustomTooltip = ({ active, payload }: {
     if (!active || !payload?.length) return null;
     const item = payload[0];
     return (
-        <div className="bg-[#111] border border-[#2a2a2a] rounded-md px-3 py-2 text-[11px] font-mono shadow-sm">
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-md px-3 py-2 text-[11px] font-mono shadow-sm">
             <p style={{ color: item.payload.color }} className="font-semibold">
                 {item.name}: {item.value}%
             </p>

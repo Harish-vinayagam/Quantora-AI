@@ -308,9 +308,9 @@ export default function SimulationOverlay() {
             className="fixed bottom-4 right-4 z-[9999] font-mono animate-fade-in"
             style={{ width: minimized ? '200px' : '420px' }}
         >
-            <div className="rounded-xl border border-[var(--border)] bg-[#0a0a0a]/95 backdrop-blur-xl shadow-2xl shadow-black/50 overflow-hidden">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-overlay)] backdrop-blur-xl shadow-2xl shadow-black/20 overflow-hidden">
                 {/* Header */}
-                <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2.5 bg-[#111]/80">
+                <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2.5 bg-[var(--surface)]">
                     <div className="relative flex-shrink-0">
                         {running ? (
                             <span className="relative flex h-2 w-2">
@@ -343,7 +343,7 @@ export default function SimulationOverlay() {
                 </div>
 
                 {/* Mini stats bar (always visible) */}
-                <div className="px-4 py-2 border-b border-[var(--border)] flex items-center justify-between bg-[#0d0d0d]">
+                <div className="px-4 py-2 border-b border-[var(--border)] flex items-center justify-between bg-[var(--bg)]">
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-1.5">
                             <Zap size={9} className="text-amber-400" />
@@ -386,7 +386,7 @@ export default function SimulationOverlay() {
 
                 {/* Log (collapsible) */}
                 {!minimized && (
-                    <div className="max-h-[260px] overflow-y-auto custom-scrollbar bg-[#080808]">
+                    <div className="max-h-[260px] overflow-y-auto custom-scrollbar bg-[var(--bg)]">
                         {log.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-8 gap-2 text-[var(--text-muted)]">
                                 <Loader2 size={16} className="opacity-30" />

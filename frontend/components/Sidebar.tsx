@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Network, Bell, Settings, BarChart3, GitBranch, List, Brain, Plug, Landmark, LogOut, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Network, Bell, Settings, BarChart3, GitBranch, List, Brain, Plug, Landmark, LogOut, ShieldCheck, Sun, Moon } from 'lucide-react';
 import { logoutUser, getStoredUser, type AuthUser } from '@/lib/api';
+import { useTheme } from '@/components/ThemeProvider';
 
 const NAV_ITEMS = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
 export default function Sidebar() {
     const pathname = usePathname();
     const [user, setUser] = useState<AuthUser | null>(null);
+    const { theme, toggleTheme } = useTheme();
 
     useEffect(() => {
         setUser(getStoredUser());
@@ -73,8 +75,8 @@ export default function Sidebar() {
                         <Link
                             href="/admin"
                             className={`relative flex items-center gap-2.5 px-3 py-2 rounded-md text-[11px] font-mono transition-all duration-150 ${pathname === '/admin'
-                                    ? 'bg-amber-500/10 text-amber-400 font-semibold border border-amber-500/20'
-                                    : 'text-amber-400/60 hover:text-amber-400 hover:bg-amber-500/10 border border-transparent'
+                                ? 'bg-amber-500/10 text-amber-400 font-semibold border border-amber-500/20'
+                                : 'text-amber-400/60 hover:text-amber-400 hover:bg-amber-500/10 border border-transparent'
                                 }`}
                         >
                             {pathname === '/admin' && (
@@ -107,13 +109,23 @@ export default function Sidebar() {
                         </div>
                     </div>
                 )}
-                <button
-                    onClick={logoutUser}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[10px] font-mono text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all"
-                >
-                    <LogOut size={11} />
-                    Sign Out
-                </button>
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={toggleTheme}
+                        className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-all"
+                        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    >
+                        {theme === 'dark' ? <Sun size={11} /> : <Moon size={11} />}
+                        {theme === 'dark' ? 'Light' : 'Dark'}
+                    </button>
+                    <button
+                        onClick={logoutUser}
+                        className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[10px] font-mono text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all"
+                    >
+                        <LogOut size={11} />
+                        Sign Out
+                    </button>
+                </div>
             </div>
         </aside>
     );

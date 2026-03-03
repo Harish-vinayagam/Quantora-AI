@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import SimulationOverlay from '@/components/SimulationOverlay';
+import { ThemeProvider } from '@/components/ThemeProvider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -16,7 +17,7 @@ export default function RootLayout({
     children: React.ReactNode;
 }) {
     return (
-        <html lang="en" className="dark">
+        <html lang="en" className="dark" suppressHydrationWarning>
             <head>
                 <link
                     href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Inter:wght@300;400;500;600&display=swap"
@@ -24,8 +25,10 @@ export default function RootLayout({
                 />
             </head>
             <body className={`${inter.className} antialiased`}>
-                {children}
-                <SimulationOverlay />
+                <ThemeProvider>
+                    {children}
+                    <SimulationOverlay />
+                </ThemeProvider>
             </body>
         </html>
     );

@@ -2,23 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Light/Dark CSS variables ── */
+/* ── Light theme (default) ── */
 :root {
-  --bg: #ffffff;
-  --surface: #f4f4f5;
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-hover: #f4f4f5;
   --border: #e4e4e7;
+  --border-strong: #d4d4d8;
   --text-primary: #09090b;
   --text-secondary: #3f3f46;
   --text-muted: #71717a;
+  --panel-bg: #ffffff;
+  --panel-overlay: rgba(255, 255, 255, 0.95);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --risk-safe: #16a34a;
+  --risk-warn: #ca8a04;
+  --risk-danger: #dc2626;
 }
 
+/* ── Dark theme ── */
 .dark {
   --bg: #0a0a0a;
   --surface: #111111;
+  --surface-hover: #191919;
   --border: #1f1f1f;
+  --border-strong: #2a2a2a;
   --text-primary: #fafafa;
   --text-secondary: #a1a1aa;
   --text-muted: #52525b;
+  --panel-bg: #0a0a0a;
+  --panel-overlay: rgba(10, 10, 10, 0.95);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --risk-safe: #4ade80;
+  --risk-warn: #facc15;
+  --risk-danger: #f87171;
 }
 
 /* ── Base reset ── */
@@ -34,6 +51,24 @@ body {
   background-color: var(--bg);
   color: var(--text-primary);
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* ── Light theme specific overrides ── */
+:root:not(.dark) .sidebar-active {
+  background-color: var(--surface);
+  border-color: var(--border-strong);
+}
+
+:root:not(.dark) input,
+:root:not(.dark) select,
+:root:not(.dark) textarea {
+  border-color: var(--border);
+}
+
+:root:not(.dark) input:focus,
+:root:not(.dark) select:focus,
+:root:not(.dark) textarea:focus {
+  border-color: var(--border-strong);
 }
 
 /* ── Scrollbar hide utility ── */
