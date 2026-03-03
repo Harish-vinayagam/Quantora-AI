@@ -24,11 +24,9 @@ import {
 
 // ── Realistic Transaction Data ─────────────────────────────────────
 
-const ACCOUNTS = [
-    'A001', 'A002', 'A003', 'A004', 'A005',
-    'B001', 'B002', 'B003', 'B004', 'B005', 'B006', 'B007', 'B008',
-    'C001', 'C002', 'C003',
-];
+// 200 accounts matching seed data + some simulation-only accounts
+const NORMAL_ACCOUNTS = Array.from({ length: 50 }, (_, i) => `ACC-${String(i + 1).padStart(4, '0')}`);
+const FRAUD_ACCOUNTS = ['FRD-001', 'FRD-002', 'FRD-003'];
 
 const BANK_CONFIGS = [
     { bank_name: 'State Bank API', api_key: 'sk_sbi_prod_a8f2c91e4d', endpoint_url: 'https://api.sbi.co.in/v3/transactions' },
@@ -36,41 +34,47 @@ const BANK_CONFIGS = [
     { bank_name: 'ICICI Real-Time Feed', api_key: 'cl_icici_rt_5c4a8e6d21', endpoint_url: 'https://feeds.icicibank.com/iso20022' },
 ];
 
-const TX_DESCRIPTIONS = [
+const NORMAL_DESCRIPTIONS = [
     'Vendor payment — Q4 settlement',
     'Interbank RTGS transfer',
     'Salary credit — payroll batch',
     'Merchant refund processing',
-    'Foreign wire — USD conversion',
     'Loan EMI auto-debit',
     'UPI bulk settlement',
     'Insurance premium collection',
     'Mutual fund SIP debit',
     'Trade settlement — equity',
-    'Cross-border remittance',
     'Corporate payroll disbursement',
     'Tax challan payment',
+    'Utility bill payment',
+    'Rent transfer — monthly',
+    'Invoice payment — services',
+    'Subscription renewal',
+];
+
+const FRAUD_DESCRIPTIONS = [
     'Suspicious rapid transfer',
     'Layered multi-hop routing',
     'High-value night transaction',
 ];
 
+// CSV with realistic mix — mostly normal, 1-2 suspicious
 const CSV_DATA = `sender,receiver,amount
-B001,A003,15000
-B002,B005,2500
-A001,B003,45000
-C001,B007,8200
-B004,A002,32000
-A005,B006,12750
-B008,C002,67500
-A003,B001,4800
-C003,A004,95000
-B003,B007,18900
-A002,C001,7650
-B006,A001,22500
-B005,B002,3100
-A004,B004,56000
-C002,B008,11200`;
+ACC-0012,ACC-0034,1850
+ACC-0007,ACC-0041,3200
+ACC-0023,ACC-0009,750
+ACC-0018,ACC-0045,4100
+ACC-0031,ACC-0002,920
+ACC-0005,ACC-0028,2650
+ACC-0014,ACC-0037,1100
+ACC-0042,ACC-0019,3800
+ACC-0008,ACC-0026,580
+ACC-0033,ACC-0011,1700
+ACC-0021,ACC-0039,2200
+ACC-0016,ACC-0044,4500
+ACC-0003,ACC-0029,1350
+FRD-001,ACC-0015,52000
+ACC-0046,ACC-0010,890`;
 
 
 // ── Live Activity Log Entry ────────────────────────────────────────
@@ -123,9 +127,20 @@ export default function SimulationOverlay() {
         logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [log]);
 
-    const randomAccount = () => ACCOUNTS[Math.floor(Math.random() * ACCOUNTS.length)];
-    const randomAmount = () => Math.round((Math.random() * 80000 + 1000) * 100) / 100;
-    const randomDesc = () => TX_DESCRIPTIONS[Math.floor(Math.random() * TX_DESCRIPTIONS.length)];
+    const randomNormal = () => NORMAL_ACCOUNTS[Math.floor(Math.random() * NORMAL_ACCOUNTS.length)];
+    const randomNormalDesc = () => NORMAL_DESCRIPTIONS[Math.floor(Math.random() * NORMAL_DESCRIPTIONS.length)];
+    const randomFraudDesc = () => FRAUD_DESCRIPTIONS[Math.floor(Math.random() * FRAUD_DESCRIPTIONS.length)];
+
+    // Realistic amount distribution — mostly small
+    const randomNormalAmount = () => {
+        const r = Math.random();
+        if (r < 0.5) return Math.round(Math.random() * 2000 + 100);          // ₹100-₹2,100
+        if (r < 0.8) return Math.round(Math.random() * 5000 + 2000);         // ₹2,000-₹7,000
+        if (r < 0.95) return Math.round(Math.random() * 10000 + 5000);       // ₹5,000-₹15,000
+        return Math.round(Math.random() * 15000 + 15000);                     // ₹15,000-₹30,000 (rare)
+    };
+
+    const randomFraudAmount = () => Math.round(Math.random() * 50000 + 40000); // ₹40,000-₹90,000
 
     // ── Simulation Phases ───────────────────────────────────────────
 
@@ -156,56 +171,71 @@ export default function SimulationOverlay() {
                     filesProcessed: s.filesProcessed + 1,
                 }));
             }
-            // Phase 4+: Alternate between syncs and manual transactions
+            // Phase 4+: Realistic transaction stream (~95% normal, ~5% suspicious)
             else {
-                const action = Math.random();
+                const isFraud = Math.random() < 0.05; // Only 5% chance of fraud attempt
 
-                // ~30% chance: Sync a random bank connection
-                if (action < 0.3 && connIdsRef.current.length > 0) {
-                    // Submit a batch of transactions instead of sync
-                    const batchSize = Math.floor(Math.random() * 3) + 2;
-                    const bankName = BANK_CONFIGS[Math.floor(Math.random() * BANK_CONFIGS.length)]?.bank_name || 'Bank';
-                    addLog('info', `Processing batch from ${bankName}...`);
-                    let batchFraud = 0;
-                    for (let j = 0; j < batchSize; j++) {
-                        let s = randomAccount(), r = randomAccount();
-                        while (r === s) r = randomAccount();
-                        const a = randomAmount();
-                        const tx = await submitManualTransaction({ sender: s, receiver: r, amount: a, description: randomDesc() });
-                        if (tx.is_fraud) batchFraud++;
-                    }
-                    addLog('sync', `↻ ${bankName}: ${batchSize} transactions processed`);
-                    if (batchFraud > 0) {
-                        addLog('fraud', `⚠ ${batchFraud} fraud alert${batchFraud > 1 ? 's' : ''} from ${bankName}!`);
-                    }
-                    setStats(s => ({
-                        ...s,
-                        txCount: s.txCount + batchSize,
-                        fraudCount: s.fraudCount + batchFraud,
-                    }));
-                }
-                // ~70% chance: Submit manual transaction
-                else {
-                    let sender = randomAccount();
-                    let receiver = randomAccount();
-                    while (receiver === sender) receiver = randomAccount();
-                    const amount = randomAmount();
-                    const desc = randomDesc();
+                if (isFraud) {
+                    // Rare fraud transaction
+                    const sender = FRAUD_ACCOUNTS[Math.floor(Math.random() * FRAUD_ACCOUNTS.length)];
+                    const receiver = randomNormal();
+                    const amount = randomFraudAmount();
+                    const desc = randomFraudDesc();
 
-                    const tx = await submitManualTransaction({
-                        sender,
-                        receiver,
-                        amount,
-                        description: desc,
-                    });
-
+                    const tx = await submitManualTransaction({ sender, receiver, amount, description: desc });
                     const riskPct = (tx.risk_score * 100).toFixed(1);
+
                     if (tx.is_fraud) {
                         addLog('fraud', `⚠ FRAUD: ${sender}→${receiver} ₹${amount.toLocaleString()} (${riskPct}% risk) — ${desc}`);
                         setStats(s => ({ ...s, txCount: s.txCount + 1, fraudCount: s.fraudCount + 1 }));
                     } else {
                         addLog('tx', `${sender}→${receiver} ₹${amount.toLocaleString()} — risk ${riskPct}% — ${desc}`);
                         setStats(s => ({ ...s, txCount: s.txCount + 1 }));
+                    }
+                } else {
+                    // Normal transaction (vast majority)
+                    const action = Math.random();
+
+                    if (action < 0.3 && connIdsRef.current.length > 0) {
+                        // Bank batch processing
+                        const batchSize = Math.floor(Math.random() * 3) + 2;
+                        const bankName = BANK_CONFIGS[Math.floor(Math.random() * BANK_CONFIGS.length)]?.bank_name || 'Bank';
+                        addLog('info', `Processing batch from ${bankName}...`);
+                        let batchFraud = 0;
+                        for (let j = 0; j < batchSize; j++) {
+                            let s = randomNormal(), r = randomNormal();
+                            while (r === s) r = randomNormal();
+                            const a = randomNormalAmount();
+                            const tx = await submitManualTransaction({ sender: s, receiver: r, amount: a, description: randomNormalDesc() });
+                            if (tx.is_fraud) batchFraud++;
+                        }
+                        addLog('sync', `↻ ${bankName}: ${batchSize} transactions processed`);
+                        if (batchFraud > 0) {
+                            addLog('fraud', `⚠ ${batchFraud} fraud alert${batchFraud > 1 ? 's' : ''} from ${bankName}!`);
+                        }
+                        setStats(s => ({
+                            ...s,
+                            txCount: s.txCount + batchSize,
+                            fraudCount: s.fraudCount + batchFraud,
+                        }));
+                    } else {
+                        // Single normal transaction
+                        let sender = randomNormal();
+                        let receiver = randomNormal();
+                        while (receiver === sender) receiver = randomNormal();
+                        const amount = randomNormalAmount();
+                        const desc = randomNormalDesc();
+
+                        const tx = await submitManualTransaction({ sender, receiver, amount, description: desc });
+                        const riskPct = (tx.risk_score * 100).toFixed(1);
+
+                        if (tx.is_fraud) {
+                            addLog('fraud', `⚠ FRAUD: ${sender}→${receiver} ₹${amount.toLocaleString()} (${riskPct}% risk) — ${desc}`);
+                            setStats(s => ({ ...s, txCount: s.txCount + 1, fraudCount: s.fraudCount + 1 }));
+                        } else {
+                            addLog('tx', `${sender}→${receiver} ₹${amount.toLocaleString()} — risk ${riskPct}% — ${desc}`);
+                            setStats(s => ({ ...s, txCount: s.txCount + 1 }));
+                        }
                     }
                 }
             }
