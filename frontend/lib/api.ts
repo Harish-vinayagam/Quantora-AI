@@ -393,3 +393,48 @@ export async function fetchHealth(): Promise<Record<string, unknown>> {
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
 }
+
+
+// ─────────────────────────────────────────────────────
+// Admin Endpoints
+// ─────────────────────────────────────────────────────
+
+export async function listUsers(): Promise<AuthUser[]> {
+    const res = await authFetch(`${API_BASE}/admin/users`);
+    if (!res.ok) {
+        if (res.status === 403) throw new Error('Admin access required');
+        throw new Error(`API error: ${res.status}`);
+    }
+    return await res.json();
+}
+
+export async function createUserAdmin(email: string, password: string, fullName: string, role: string): Promise<AuthUser> {
+    const res = await authFetch(`${API_BASE}/admin/users`, {
+        method: 'POST',
+        body: JSON.stringify({ email, password, full_name: fullName, role }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({ detail: 'Failed to create user' }));
+        throw new Error(data.detail || 'Failed to create user');
+    }
+    return await res.json();
+}
+
+export async function updateUserRole(userId: string, role: string): Promise<AuthUser> {
+    const res = await authFetch(`${API_BASE}/admin/users/${userId}/role`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role }),
+    });
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    return await res.json();
+}
+
+export async function deleteUserAdmin(userId: string): Promise<void> {
+    const res = await authFetch(`${API_BASE}/admin/users/${userId}`, {
+        method: 'DELETE',
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({ detail: 'Failed to delete user' }));
+        throw new Error(data.detail || 'Failed to delete user');
+    }
+}
