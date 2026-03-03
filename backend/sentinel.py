@@ -81,21 +81,22 @@ def compute_transaction_risk(amount: float) -> float:
     Normalizes the transaction amount to a [0, 1] risk scale.
 
     Formula:
-        TRS = min(amount / 10000, 1)
+        TRS = min(amount / 50000, 1)
 
     Rationale:
-        Transactions approaching or exceeding $10,000 are inherently
-        higher risk due to regulatory reporting thresholds (e.g., BSA/AML
-        Currency Transaction Reports). This component ensures that large
-        transfers always contribute meaningful risk signal.
+        Transactions approaching or exceeding ₹50,000 are inherently
+        higher risk due to regulatory reporting thresholds. Using a
+        higher normalization factor ensures normal transactions (₹500-₹5000)
+        produce low TRS values, while only truly high-value transfers
+        (₹25,000+) contribute significant risk signal.
 
     Args:
-        amount: Transaction amount in USD.
+        amount: Transaction amount in INR.
 
     Returns:
         Float in [0, 1] representing monetary risk.
     """
-    return min(amount / 10000.0, 1.0)
+    return min(amount / 50000.0, 1.0)
 
 
 def compute_graph_risk(sender_degree: float) -> float:
@@ -105,15 +106,15 @@ def compute_graph_risk(sender_degree: float) -> float:
     Converts sender degree centrality into a [0, 1] risk measure.
 
     Formula:
-        GRS = min(sender_degree * 5, 1)
+        GRS = min(sender_degree * 3, 1)
 
     Rationale:
         Degree centrality ranges from 0 to 1 in a normalized graph.
-        Multiplying by 5 amplifies the signal so that nodes with even
-        moderate connectivity (>0.2 centrality) are flagged as high
-        graph risk. This is critical for detecting hub nodes in
-        money laundering networks where a single account fans out
-        to many recipients.
+        Multiplying by 3 amplifies the signal so that only highly
+        connected nodes (>0.33 centrality) saturate the risk scale.
+        This prevents false positives for accounts with normal
+        connectivity while still catching hub nodes in money
+        laundering networks.
 
     Args:
         sender_degree: Degree centrality of the sender node (0 to 1).
@@ -121,7 +122,7 @@ def compute_graph_risk(sender_degree: float) -> float:
     Returns:
         Float in [0, 1] representing topological risk.
     """
-    return min(sender_degree * 5.0, 1.0)
+    return min(sender_degree * 3.0, 1.0)
 
 
 def compute_network_density_boost(sender_degree: float) -> float:
@@ -131,18 +132,18 @@ def compute_network_density_boost(sender_degree: float) -> float:
     Adaptive risk escalation for highly connected senders.
 
     Formula:
-        NDB = 0.3 if sender_degree > 0.05, else 0
+        NDB = 0.3 if sender_degree > 0.15, else 0
 
     Rationale:
-        When a sender's degree centrality exceeds a minimum threshold,
-        SAGRA activates an additional risk boost. This makes the algorithm
-        adaptive — nodes that are becoming increasingly connected in the
-        graph receive an automatic risk escalation, even if their individual
-        transaction amounts are small. This catches "smurfing" patterns
-        where many small transactions are used to avoid detection.
+        When a sender's degree centrality exceeds 15% connectivity,
+        SAGRA activates an additional risk boost. This threshold ensures
+        only genuinely suspicious hub nodes (connected to >15% of the
+        network) receive escalation — not normal accounts with a few
+        connections. This catches "smurfing" patterns where a single
+        account fans out to many recipients.
 
     Adaptability:
-        The 0.05 threshold can be dynamically adjusted based on:
+        The 0.15 threshold can be dynamically adjusted based on:
         - Historical network density baselines
         - Customer segment profiles
         - Time-of-day activity patterns
@@ -154,7 +155,7 @@ def compute_network_density_boost(sender_degree: float) -> float:
     Returns:
         0.3 if sender exceeds connectivity threshold, else 0.0.
     """
-    return 0.3 if sender_degree > 0.05 else 0.0
+    return 0.3 if sender_degree > 0.15 else 0.0
 
 
 def compute_final_risk(trs: float, grs: float, ndb: float) -> Tuple[float, int]:
@@ -217,9 +218,9 @@ def run_sagra(amount: float, sender_degree: float) -> SAGRAResult:
         SAGRAResult containing all component scores, final risk, and prediction.
 
     Example:
-        >>> result = run_sagra(amount=15000, sender_degree=0.12)
+        >>> result = run_sagra(amount=45000, sender_degree=0.25)
         >>> result.risk_score
-        0.83
+        0.825
         >>> result.fraud_prediction
         1
     """
