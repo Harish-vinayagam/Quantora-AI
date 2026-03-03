@@ -160,55 +160,104 @@ async def _create_default_accounts():
 
 
 async def _run_seed():
-    """Fallback seed function — only runs if SEED_DATA=true."""
+    """Seed realistic transaction data — ~5-8% fraud rate."""
     import random
     from app.database import async_session
     from app.services.sagra import process_transaction
+    from datetime import timedelta
 
     random.seed(42)
     now = datetime.utcnow()
 
+    # 30 normal accounts, 3 fraud accounts
+    NORMAL = [f"ACC-{str(i).zfill(3)}" for i in range(1, 31)]
+    FRAUD = ["FRD-001", "FRD-002", "FRD-003"]
+    ALL = NORMAL + FRAUD
+
     async with async_session() as db:
-        from datetime import timedelta
-
-        FRAUD_ACCOUNTS = ["A001", "A002", "A003", "A004", "A005"]
-        NORMAL_ACCOUNTS = ["B001", "B002", "B003", "B004", "B005", "B006", "B007", "B008", "C001", "C002", "C003"]
-        ALL_ACCOUNTS = FRAUD_ACCOUNTS + NORMAL_ACCOUNTS
-
-        for hour in range(24):
-            base_time = now - timedelta(hours=24 - hour)
-            count = random.randint(6, 14) if 8 <= hour <= 20 else random.randint(2, 5)
+        # ── Normal transactions (bulk, low amount, low risk) ──
+        for hour in range(48):  # 2 days of data
+            base_time = now - timedelta(hours=48 - hour)
+            count = random.randint(8, 20) if 8 <= (hour % 24) <= 20 else random.randint(2, 6)
 
             for _ in range(count):
                 ts = base_time + timedelta(minutes=random.randint(0, 59), seconds=random.randint(0, 59))
-
-                if random.random() < 0.2:
-                    sender = random.choice(FRAUD_ACCOUNTS)
-                    receiver = random.choice(ALL_ACCOUNTS)
-                    while receiver == sender:
-                        receiver = random.choice(ALL_ACCOUNTS)
-                    amount = round(random.uniform(8000, 55000), 2)
-                else:
-                    sender = random.choice(NORMAL_ACCOUNTS)
-                    receiver = random.choice(ALL_ACCOUNTS)
-                    while receiver == sender:
-                        receiver = random.choice(ALL_ACCOUNTS)
-                    amount = round(random.uniform(100, 4000), 2)
-
+                sender = random.choice(NORMAL)
+                receiver = random.choice(ALL)
+                while receiver == sender:
+                    receiver = random.choice(ALL)
+                amount = round(random.uniform(200, 8000), 2)
                 await process_transaction(sender, receiver, amount, db, timestamp=ts, source="seed")
 
-        # Fraud cluster core transactions
-        fraud_core = [
-            ("A001", "A002", 42000), ("A002", "A003", 38000),
-            ("A003", "A004", 51000), ("A004", "A001", 29000),
-            ("A001", "A005", 17000), ("A005", "A003", 23000),
+        # ── Suspicious transactions (~5% of total, high amounts) ──
+        for _ in range(25):
+            ts = now - timedelta(hours=random.randint(1, 36), minutes=random.randint(0, 59))
+            sender = random.choice(FRAUD)
+            receiver = random.choice(NORMAL)
+            amount = round(random.uniform(30000, 80000), 2)
+            await process_transaction(sender, receiver, amount, db, timestamp=ts, source="seed")
+
+        # ── One clear fraud ring (coordinated circular transfers) ──
+        ring = [
+            ("FRD-001", "FRD-002", 55000),
+            ("FRD-002", "FRD-003", 48000),
+            ("FRD-003", "FRD-001", 42000),
+            ("FRD-001", "ACC-015", 35000),
         ]
-        for i, (s, r, a) in enumerate(fraud_core):
-            from datetime import timedelta
-            await process_transaction(s, r, a, db, timestamp=now - timedelta(minutes=(len(fraud_core) - i) * 2), source="seed")
+        for i, (s, r, a) in enumerate(ring):
+            await process_transaction(s, r, a, db, timestamp=now - timedelta(minutes=(len(ring) - i) * 3), source="seed")
 
     random.seed()
-    logger.info("Seed data loaded")
+    logger.info("Seed data loaded (realistic fraud rate ~5-8%%)")
+
+
+async def _run_simulation():
+    """Run a quick live simulation — injects 20 transactions in real-time pattern."""
+    import random
+    from app.database import async_session
+    from app.services.sagra import process_transaction
+
+    now = datetime.utcnow()
+    ACCOUNTS = [f"SIM-{str(i).zfill(3)}" for i in range(1, 16)]
+    FRAUD_ACC = "SIM-FRAUD"
+
+    async with async_session() as db:
+        # 16 normal transactions
+        for i in range(16):
+            from datetime import timedelta
+            sender = random.choice(ACCOUNTS)
+            receiver = random.choice(ACCOUNTS)
+            while receiver == sender:
+                receiver = random.choice(ACCOUNTS)
+            amount = round(random.uniform(300, 5000), 2)
+            ts = now - timedelta(minutes=random.randint(0, 30))
+            await process_transaction(sender, receiver, amount, db, timestamp=ts, source="simulation")
+
+        # 4 suspicious transactions from a fraud account
+        for target in random.sample(ACCOUNTS, 4):
+            from datetime import timedelta
+            amount = round(random.uniform(35000, 70000), 2)
+            ts = now - timedelta(minutes=random.randint(0, 10))
+            await process_transaction(FRAUD_ACC, target, amount, db, timestamp=ts, source="simulation")
+
+    logger.info("Simulation complete — 20 transactions injected")
+
+
+# ── Admin Triggers for Seed / Simulation ──
+
+@app.post("/admin/seed", tags=["Admin"])
+async def trigger_seed():
+    """Trigger seed data injection (admin use)."""
+    from app.auth import get_current_user
+    await _run_seed()
+    return {"detail": "Seed data loaded successfully", "fraud_rate": "~5-8%"}
+
+
+@app.post("/admin/simulate", tags=["Admin"])
+async def trigger_simulation():
+    """Trigger a live simulation batch (admin use)."""
+    await _run_simulation()
+    return {"detail": "Simulation complete — 20 transactions injected"}
 
 
 # ── Entry Point ──
