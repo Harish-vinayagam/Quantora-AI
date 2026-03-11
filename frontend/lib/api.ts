@@ -69,6 +69,8 @@ export async function loginUser(email: string, password: string): Promise<AuthRe
     const data: AuthResponse = await res.json();
     localStorage.setItem('quantora_token', data.token);
     localStorage.setItem('quantora_user', JSON.stringify(data.user));
+    // Set cookie so Next.js Edge middleware can read auth state server-side
+    document.cookie = `quantora_token=${data.token}; path=/; SameSite=Strict`;
     return data;
 }
 
@@ -91,6 +93,8 @@ export async function registerUser(email: string, password: string, fullName: st
 export function logoutUser(): void {
     localStorage.removeItem('quantora_token');
     localStorage.removeItem('quantora_user');
+    // Clear the auth cookie used by Edge middleware
+    document.cookie = 'quantora_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
     window.location.href = '/login';
 }
 
