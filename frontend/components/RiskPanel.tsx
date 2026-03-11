@@ -164,7 +164,8 @@ export default function RiskPanel({ selectedNode, riskScore }: RiskPanelProps) {
                 {/* API stub notice */}
                 <div className="p-2.5 rounded-md border border-[var(--border)] bg-[var(--surface)]">
                     <p className="text-[9px] font-mono text-[var(--text-muted)] leading-relaxed">
-            // API READY — Replace calculateRisk() in lib/riskEngine.ts with live endpoint
+                        {/* API READY — Replace calculateRisk() in lib/riskEngine.ts with live endpoint */}
+                        API READY — Replace calculateRisk() in lib/riskEngine.ts with live endpoint
                     </p>
                 </div>
             </div>

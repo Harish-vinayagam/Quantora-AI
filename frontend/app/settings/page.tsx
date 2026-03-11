@@ -215,7 +215,8 @@ export default function SettingsPage() {
                         {/* API stub note */}
                         <div className="px-4 py-3 rounded-md border border-[var(--border)] bg-[var(--surface)]">
                             <p className="text-[9px] font-mono text-[var(--text-muted)] leading-relaxed">
-                // UI ONLY — Connect Save Changes to your config API endpoint to persist settings
+                                {/* UI ONLY — Connect Save Changes to your config API endpoint to persist settings */}
+                                UI ONLY — Connect Save Changes to your config API endpoint to persist settings
                             </p>
                         </div>
                     </div>
